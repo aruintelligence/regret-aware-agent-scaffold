@@ -1,0 +1,1853 @@
+from __future__ import annotations
+
+import json
+import math
+import time
+import uuid
+from collections import defaultdict
+from dataclasses import asdict, dataclass, field
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+
+# ============================================================
+# Enums
+# ============================================================
+
+
+class TaskType(str, Enum):
+    UNKNOWN = "unknown"
+    RESEARCH = "research"
+    DESIGN = "design"
+    SIMULATION = "simulation"
+    SYMBOLIC = "symbolic"
+    MIXED = "mixed"
+    META_SYSTEM = "meta_system"
+
+
+class TaskPhase(str, Enum):
+    INTAKE = "intake"
+    ANALYSIS = "analysis"
+    ROUTING = "routing"
+    EXECUTION = "execution"
+    EVALUATION = "evaluation"
+    FINALIZATION = "finalization"
+
+
+class PolicyMode(str, Enum):
+    BALANCED = "balanced"
+    RESEARCH_FIRST = "research_first"
+    DESIGN_FIRST = "design_first"
+    VERIFICATION_HEAVY = "verification_heavy"
+    SYNTHESIS_HEAVY = "synthesis_heavy"
+    CONFLICT_HEAVY = "conflict_heavy"
+    COHERENCE_HEAVY = "coherence_heavy"
+
+
+class NodeType(str, Enum):
+    INTAKE = "intake"
+    ANALYSIS = "analysis"
+    SPECIALIST = "specialist"
+    CONTROL = "control"
+    EVALUATION = "evaluation"
+    MEMORY = "memory"
+    CONTROLLER = "controller"
+    OUTPUT = "output"
+
+
+# ============================================================
+# Data contracts
+# ============================================================
+
+
+@dataclass
+class ContextState:
+    memory_summary: str = ""
+    constraints: List[str] = field(default_factory=list)
+    goals: List[str] = field(default_factory=list)
+    tone: str = ""
+    domain_tags: List[str] = field(default_factory=list)
+
+
+@dataclass
+class SignalState:
+    primary_signal: str = ""
+    secondary_signals: List[str] = field(default_factory=list)
+    noise_items: List[str] = field(default_factory=list)
+    ambiguity_score: float = 0.5
+    systemic_signal: str = ""
+    optimization_target: str = ""
+
+
+@dataclass
+class ReasoningState:
+    hypotheses: List[str] = field(default_factory=list)
+    claims: List[str] = field(default_factory=list)
+    open_questions: List[str] = field(default_factory=list)
+    contradictions: List[str] = field(default_factory=list)
+
+
+@dataclass
+class MetricsState:
+    clarity: float = 0.30
+    coherence: float = 0.30
+    distortion: float = 0.40
+    evidence: float = 0.20
+    novelty: float = 0.20
+    compression: float = 0.10
+    goal_alignment: float = 0.30
+    completion_readiness: float = 0.10
+
+    def clamp(self) -> None:
+        for k, v in vars(self).items():
+            setattr(self, k, max(0.0, min(1.0, v)))
+
+
+@dataclass
+class RouteState:
+    selected_path: List[str] = field(default_factory=list)
+    planned_path: List[str] = field(default_factory=list)
+    candidate_paths: List[List[str]] = field(default_factory=list)
+    planner_candidates_history: List[List[Dict[str, Any]]] = field(default_factory=list)
+    loop_paths: List[List[str]] = field(default_factory=list)
+    successful_path: List[str] = field(default_factory=list)
+    branch_depth: int = 0
+    loop_count: int = 0
+    max_loops: int = 3
+    reroute_reasons: List[str] = field(default_factory=list)
+
+
+@dataclass
+class EvaluationState:
+    passed: bool = False
+    failure_modes: List[str] = field(default_factory=list)
+    improvement_delta: Dict[str, float] = field(default_factory=dict)
+    rerun_recommended: bool = False
+    overall_quality: float = 0.0
+
+
+@dataclass
+class MasterControlState:
+    policy_mode: PolicyMode = PolicyMode.BALANCED
+    priority_weights: Dict[str, float] = field(default_factory=dict)
+    edge_weights: Dict[str, float] = field(default_factory=dict)
+    stop_decision: bool = False
+    reroute_decision: bool = False
+    escalation: str = "none"
+    threshold_quality: float = 0.62
+    threshold_conflict: float = 0.45
+
+
+@dataclass
+class FinalOutputState:
+    answer: str = ""
+    artifacts: List[str] = field(default_factory=list)
+    citations: List[str] = field(default_factory=list)
+    confidence: float = 0.0
+
+
+@dataclass
+class StateDelta:
+    clarity_delta: float = 0.0
+    coherence_delta: float = 0.0
+    distortion_delta: float = 0.0
+    evidence_delta: float = 0.0
+    novelty_delta: float = 0.0
+    compression_delta: float = 0.0
+    goal_alignment_delta: float = 0.0
+    completion_readiness_delta: float = 0.0
+
+
+@dataclass
+class Recommendations:
+    next_nodes: List[str] = field(default_factory=list)
+    reroute: bool = False
+    escalate: bool = False
+    reason: str = ""
+
+
+@dataclass
+class NodeResult:
+    node_name: str
+    node_type: NodeType
+    run_id: str
+    task_phase: TaskPhase
+    inputs: Dict[str, Any]
+    outputs: Dict[str, Any]
+    state_delta: StateDelta
+    recommendations: Recommendations
+    confidence: float
+    latency_s: float
+    complexity_cost: float
+
+
+@dataclass
+class NodeScore:
+    usefulness: float
+    coherence_delta: float
+    evidence_delta: float
+    novelty_delta: float
+    goal_alignment_delta: float
+    completion_delta: float
+    latency_penalty: float
+    contradiction_penalty: float
+    total: float
+
+
+@dataclass
+class EdgeScore:
+    from_node: str
+    to_node: str
+    traversed: bool
+    downstream_gain: float
+    success: bool
+
+
+@dataclass
+class RouteRecord:
+    task_signature: str
+    path: List[str]
+    overall_quality: float
+    passed: bool
+    loop_count: int
+    timestamp: float
+
+
+@dataclass
+class PlannerRecord:
+    task_signature: str
+    selected_route: List[str]
+    predicted_quality: float
+    predicted_cost: float
+    predicted_score: float
+    actual_quality: float
+    prediction_error: float
+    historical_regret: float = 0.0
+    timestamp: float = field(default_factory=time.time)
+
+
+@dataclass
+class PolicyUpdate:
+    policy_mode: PolicyMode
+    node_priority_updates: Dict[str, float] = field(default_factory=dict)
+    edge_weight_updates: Dict[str, float] = field(default_factory=dict)
+    threshold_quality: Optional[float] = None
+    notes: List[str] = field(default_factory=list)
+
+
+@dataclass
+class DWState:
+    run_id: str
+    session_id: str
+    user_input: str
+    task_type: TaskType = TaskType.UNKNOWN
+    task_phase: TaskPhase = TaskPhase.INTAKE
+    context: ContextState = field(default_factory=ContextState)
+    signals: SignalState = field(default_factory=SignalState)
+    reasoning: ReasoningState = field(default_factory=ReasoningState)
+    agent_outputs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    agent_scores: Dict[str, List[NodeScore]] = field(default_factory=dict)
+    agent_scores_by_loop: Dict[int, Dict[str, List[NodeScore]]] = field(default_factory=dict)
+    route: RouteState = field(default_factory=RouteState)
+    metrics: MetricsState = field(default_factory=MetricsState)
+    evaluation: EvaluationState = field(default_factory=EvaluationState)
+    master_control: MasterControlState = field(default_factory=MasterControlState)
+    final_output: FinalOutputState = field(default_factory=FinalOutputState)
+    trace: List[NodeResult] = field(default_factory=list)
+    edge_trace: List[EdgeScore] = field(default_factory=list)
+    edge_trace_by_loop: Dict[int, List[EdgeScore]] = field(default_factory=dict)
+    memory_hints: Dict[str, Any] = field(default_factory=dict)
+
+
+# ============================================================
+# Helpers
+# ============================================================
+
+
+def stable_sigmoid(x: float) -> float:
+    return 1.0 / (1.0 + math.exp(-max(-50.0, min(50.0, x))))
+
+
+def clamp(v: float, low: float = 0.0, high: float = 1.0) -> float:
+    return max(low, min(high, v))
+
+
+def unique_run_id() -> str:
+    return f"dw_{uuid.uuid4().hex[:10]}"
+
+
+def infer_domain_tags(text: str) -> List[str]:
+    text_l = text.lower()
+    tags: List[str] = []
+
+    tag_map = {
+        "python": ["python", "scaffold", "runtime", "class", "function"],
+        "architecture": ["architecture", "system", "design", "langgraph", "orchestrator"],
+        "evaluation": ["evaluation", "benchmark", "score", "quality", "verify"],
+        "simulation": ["simulate", "simulation", "equation", "dynamics", "trajectory"],
+        "symbolic": ["symbolic", "spiritual", "divine", "theological"],
+        "memory": ["memory", "policy", "route", "trace", "history"],
+    }
+
+    for tag, triggers in tag_map.items():
+        if any(token in text_l for token in triggers):
+            tags.append(tag)
+
+    return sorted(set(tags))
+
+
+def task_signature_from_state(state: DWState) -> str:
+    tags = ",".join(sorted(state.context.domain_tags))
+    return f"{state.task_type.value}|{tags}|a={state.signals.ambiguity_score:.2f}"
+
+
+def update_metrics(metrics: MetricsState, delta: StateDelta) -> None:
+    metrics.clarity += delta.clarity_delta
+    metrics.coherence += delta.coherence_delta
+    metrics.distortion += delta.distortion_delta
+    metrics.evidence += delta.evidence_delta
+    metrics.novelty += delta.novelty_delta
+    metrics.compression += delta.compression_delta
+    metrics.goal_alignment += delta.goal_alignment_delta
+    metrics.completion_readiness += delta.completion_readiness_delta
+    metrics.clamp()
+
+
+# ============================================================
+# Route memory and policy store
+# ============================================================
+
+
+@dataclass
+class RouteMemory:
+    route_history: Dict[str, List[RouteRecord]] = field(default_factory=lambda: defaultdict(list))
+    planner_history: Dict[str, List[PlannerRecord]] = field(default_factory=lambda: defaultdict(list))
+    node_utilities: Dict[str, List[float]] = field(default_factory=lambda: defaultdict(list))
+    edge_utilities: Dict[str, List[float]] = field(default_factory=lambda: defaultdict(list))
+    policy_history: List[PolicyUpdate] = field(default_factory=list)
+
+    def remember_route(self, record: RouteRecord) -> None:
+        self.route_history[record.task_signature].append(record)
+
+    def remember_planner(self, record: PlannerRecord) -> None:
+        self.planner_history[record.task_signature].append(record)
+
+    def remember_node_score(self, node_name: str, score: float) -> None:
+        self.node_utilities[node_name].append(score)
+
+    def remember_edge_score(self, from_node: str, to_node: str, score: float) -> None:
+        self.edge_utilities[f"{from_node}->{to_node}"].append(score)
+
+    def best_paths_for_signature(self, task_signature: str, top_k: int = 3) -> List[RouteRecord]:
+        records = sorted(
+            self.route_history.get(task_signature, []),
+            key=lambda r: (r.passed, r.overall_quality),
+            reverse=True,
+        )
+        return records[:top_k]
+
+    def avg_node_utility(self, node_name: str) -> float:
+        vals = self.node_utilities.get(node_name, [])
+        return sum(vals) / len(vals) if vals else 0.0
+
+    def avg_edge_utility(self, edge_key: str) -> float:
+        vals = self.edge_utilities.get(edge_key, [])
+        return sum(vals) / len(vals) if vals else 0.0
+
+    def avg_planner_error_for_route(self, task_signature: str, route: List[str]) -> float:
+        vals = [
+            rec.prediction_error
+            for rec in self.planner_history.get(task_signature, [])
+            if rec.selected_route == route
+        ]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    def avg_historical_regret_for_route(self, task_signature: str, route: List[str]) -> float:
+        vals = [
+            rec.historical_regret
+            for rec in self.planner_history.get(task_signature, [])
+            if rec.selected_route == route
+        ]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    def save_json(self, path: str) -> None:
+        payload = {
+            "route_history": {
+                k: [asdict(v) for v in vals] for k, vals in self.route_history.items()
+            },
+            "planner_history": {
+                k: [asdict(v) for v in vals] for k, vals in self.planner_history.items()
+            },
+            "node_utilities": dict(self.node_utilities),
+            "edge_utilities": dict(self.edge_utilities),
+            "policy_history": [
+                {
+                    **asdict(update),
+                    "policy_mode": update.policy_mode.value,
+                }
+                for update in self.policy_history
+            ],
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+
+    @classmethod
+    def load_json(cls, path: str) -> "RouteMemory":
+        p = Path(path)
+        if not p.exists():
+            return cls()
+
+        with open(p, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        memory = cls()
+
+        for signature, records in payload.get("route_history", {}).items():
+            memory.route_history[signature] = [RouteRecord(**r) for r in records]
+
+        for signature, records in payload.get("planner_history", {}).items():
+            memory.planner_history[signature] = [PlannerRecord(**r) for r in records]
+
+        for node_name, vals in payload.get("node_utilities", {}).items():
+            memory.node_utilities[node_name] = list(vals)
+
+        for edge_key, vals in payload.get("edge_utilities", {}).items():
+            memory.edge_utilities[edge_key] = list(vals)
+
+        for update in payload.get("policy_history", []):
+            memory.policy_history.append(
+                PolicyUpdate(
+                    policy_mode=PolicyMode(update["policy_mode"]),
+                    node_priority_updates=update.get("node_priority_updates", {}),
+                    edge_weight_updates=update.get("edge_weight_updates", {}),
+                    threshold_quality=update.get("threshold_quality"),
+                    notes=update.get("notes", []),
+                )
+            )
+
+        return memory
+
+
+# ============================================================
+# Planner helpers
+# ============================================================
+
+
+def dedupe_routes(routes: List[List[str]]) -> List[List[str]]:
+    seen = set()
+    result: List[List[str]] = []
+    for route in routes:
+        key = tuple(route)
+        if key not in seen:
+            seen.add(key)
+            result.append(route)
+    return result
+
+
+def generate_candidate_routes(state: DWState) -> List[List[str]]:
+    routes: List[List[str]] = []
+    t = state.task_type
+    ambiguity = state.signals.ambiguity_score
+    contradiction_count = len(state.reasoning.contradictions)
+
+    if contradiction_count >= 2 or state.metrics.coherence < 0.45:
+        routes.append(["conflict_resolver_node", "coherence_node", "compression_node"])
+
+    if t in {TaskType.DESIGN, TaskType.META_SYSTEM}:
+        routes.append(["systems_design_node", "simulation_modeling_node", "coherence_node", "compression_node"])
+        routes.append(["systems_design_node", "meaning_synthesis_node", "coherence_node", "compression_node"])
+        routes.append(["systems_design_node", "coherence_node", "compression_node"])
+
+    if t == TaskType.RESEARCH:
+        routes.append(["research_node", "truth_evidence_node", "meaning_synthesis_node", "coherence_node"])
+        routes.append(["research_node", "truth_evidence_node", "coherence_node", "compression_node"])
+
+    if t == TaskType.SYMBOLIC:
+        routes.append(["symbolic_spiritual_node", "meaning_synthesis_node", "coherence_node"])
+        routes.append(["symbolic_spiritual_node", "meaning_synthesis_node", "coherence_node", "compression_node"])
+
+    if t == TaskType.MIXED:
+        routes.append(["systems_design_node", "meaning_synthesis_node", "coherence_node", "compression_node"])
+        routes.append(["research_node", "truth_evidence_node", "meaning_synthesis_node", "coherence_node"])
+        if ambiguity <= 0.2:
+            routes.append(["systems_design_node", "simulation_modeling_node", "coherence_node", "compression_node"])
+        else:
+            routes.append(["systems_design_node", "coherence_node", "compression_node"])
+
+    if t == TaskType.SIMULATION:
+        routes.append(["simulation_modeling_node", "coherence_node", "compression_node"])
+        routes.append(["systems_design_node", "simulation_modeling_node", "coherence_node", "compression_node"])
+
+    if not routes:
+        routes.append(["systems_design_node", "coherence_node", "compression_node"])
+
+    return dedupe_routes(routes)
+
+
+def predict_route_quality(state: DWState, route: List[str], memory: Optional[RouteMemory] = None) -> float:
+    score = 0.0
+
+    best_paths = state.memory_hints.get("best_known_paths", [])
+    matched_prior = any(route == path for path in best_paths)
+
+    for node_name in route:
+        historical_priority = state.master_control.priority_weights.get(node_name, 0.0)
+        score += 0.10 + historical_priority
+
+        node_historical_bonus = 0.0
+        if node_name == "coherence_node":
+            node_historical_bonus += 0.06
+        if node_name == "compression_node":
+            node_historical_bonus += 0.03
+        if node_name == "truth_evidence_node" and state.task_type in {TaskType.RESEARCH, TaskType.MIXED}:
+            node_historical_bonus += 0.07
+        if node_name == "simulation_modeling_node" and state.task_type in {
+            TaskType.DESIGN,
+            TaskType.SIMULATION,
+            TaskType.MIXED,
+        }:
+            node_historical_bonus += 0.05
+        if node_name == "meaning_synthesis_node" and state.task_type in {TaskType.MIXED, TaskType.SYMBOLIC}:
+            node_historical_bonus += 0.04
+        score += node_historical_bonus
+
+    if matched_prior:
+        score += 0.08
+
+    if len(state.reasoning.contradictions) >= 2 and "conflict_resolver_node" in route:
+        score += 0.08
+
+    if state.signals.ambiguity_score > 0.2 and "meaning_synthesis_node" in route:
+        score += 0.04
+
+    if state.task_type == TaskType.RESEARCH and "research_node" in route:
+        score += 0.05
+
+    if state.task_type in {TaskType.DESIGN, TaskType.META_SYSTEM} and "systems_design_node" in route:
+        score += 0.05
+
+    if memory is not None:
+        task_signature = task_signature_from_state(state)
+
+        errors = [
+            rec.prediction_error
+            for rec in memory.planner_history.get(task_signature, [])
+            if rec.selected_route == route
+        ]
+        if errors:
+            avg_error = sum(errors) / len(errors)
+            n = len(errors)
+            reg = 0.22 / (1 + 1.2 * n)
+
+            if avg_error > 0.02:
+                penalty = avg_error * (0.68 + reg)
+            elif avg_error < -0.02:
+                penalty = -avg_error * (0.30 + reg * 0.6)
+            else:
+                penalty = 0.0
+
+            score -= min(abs(penalty), 0.24)
+
+        regrets = [
+            rec.historical_regret
+            for rec in memory.planner_history.get(task_signature, [])
+            if rec.selected_route == route
+        ]
+        if regrets:
+            avg_regret = sum(regrets) / len(regrets)
+            score -= min(avg_regret * 0.18, 0.08)
+
+    return clamp(score)
+
+
+def predict_route_cost(route: List[str]) -> float:
+    base_cost = 0.03 * len(route)
+    complexity_penalty = 0.02 if "simulation_modeling_node" in route else 0.0
+    research_penalty = 0.01 if "truth_evidence_node" in route else 0.0
+    conflict_penalty = 0.01 if "conflict_resolver_node" in route else 0.0
+    return base_cost + complexity_penalty + research_penalty + conflict_penalty
+
+
+# ============================================================
+# Scoring functions
+# ============================================================
+
+
+def score_node_result(result: NodeResult, contradictions: int = 0) -> NodeScore:
+    usefulness = clamp(
+        0.22 * max(0.0, result.state_delta.clarity_delta)
+        + 0.22 * max(0.0, result.state_delta.coherence_delta)
+        + 0.16 * max(0.0, result.state_delta.evidence_delta)
+        + 0.12 * max(0.0, result.state_delta.goal_alignment_delta)
+        + 0.10 * max(0.0, result.state_delta.completion_readiness_delta)
+        + 0.10 * result.confidence
+        + 0.08 * max(0.0, result.state_delta.novelty_delta)
+        + 0.08 * max(0.0, -result.state_delta.distortion_delta)
+    )
+    latency_penalty = clamp(result.latency_s / 1.0)
+    contradiction_penalty = clamp(0.08 * contradictions)
+    total = clamp(usefulness - 0.10 * latency_penalty - contradiction_penalty)
+
+    return NodeScore(
+        usefulness=usefulness,
+        coherence_delta=result.state_delta.coherence_delta,
+        evidence_delta=result.state_delta.evidence_delta,
+        novelty_delta=result.state_delta.novelty_delta,
+        goal_alignment_delta=result.state_delta.goal_alignment_delta,
+        completion_delta=result.state_delta.completion_readiness_delta,
+        latency_penalty=latency_penalty,
+        contradiction_penalty=contradiction_penalty,
+        total=total,
+    )
+
+
+def score_run_quality(metrics: MetricsState, path_length: int = 0, loop_count: int = 0) -> float:
+    base = (
+        0.215 * metrics.clarity
+        + 0.225 * metrics.coherence
+        + 0.145 * metrics.evidence
+        + 0.135 * metrics.goal_alignment
+        + 0.105 * metrics.completion_readiness
+        + 0.085 * metrics.compression
+        + 0.075 * metrics.novelty
+        - 0.26 * metrics.distortion
+    )
+
+    length_penalty = 0.038 * max(0, path_length - 6)
+    loop_penalty = 0.055 * loop_count
+
+    return clamp(base - length_penalty - loop_penalty)
+
+
+def score_route_efficiency(state: DWState) -> float:
+    flat_scores = [score.total for scores in state.agent_scores.values() for score in scores]
+    if not flat_scores:
+        return 0.0
+
+    avg_score = sum(flat_scores) / len(flat_scores)
+    length_penalty = min(len(state.route.selected_path) / 20.0, 0.25)
+    loop_penalty = min(state.route.loop_count * 0.08, 0.24)
+    return clamp(avg_score - length_penalty - loop_penalty)
+
+
+# ============================================================
+# Base node abstraction
+# ============================================================
+
+
+class BaseNode:
+    name: str = "base_node"
+    node_type: NodeType = NodeType.ANALYSIS
+    required_outputs: Tuple[str, ...] = ()
+
+    def run(self, state: DWState) -> NodeResult:
+        self.validate_preconditions(state)
+        start = time.perf_counter()
+        inputs = self.collect_inputs(state)
+        outputs, delta, recs, confidence, complexity = self.process(state)
+        latency = time.perf_counter() - start
+
+        result = NodeResult(
+            node_name=self.name,
+            node_type=self.node_type,
+            run_id=state.run_id,
+            task_phase=state.task_phase,
+            inputs=inputs,
+            outputs=outputs,
+            state_delta=delta,
+            recommendations=recs,
+            confidence=confidence,
+            latency_s=latency,
+            complexity_cost=complexity,
+        )
+        self.apply(state, result)
+        return result
+
+    def validate_preconditions(self, state: DWState) -> None:
+        missing = [key for key in self.required_outputs if key not in state.agent_outputs]
+        if missing:
+            raise RuntimeError(f"{self.name} missing required upstream outputs: {missing}")
+
+    def collect_inputs(self, state: DWState) -> Dict[str, Any]:
+        return {
+            "task_type": state.task_type.value,
+            "task_phase": state.task_phase.value,
+            "metrics": asdict(state.metrics),
+            "signals": asdict(state.signals),
+            "context": asdict(state.context),
+        }
+
+    def process(
+        self, state: DWState
+    ) -> Tuple[Dict[str, Any], StateDelta, Recommendations, float, float]:
+        raise NotImplementedError
+
+    def apply(self, state: DWState, result: NodeResult) -> None:
+        state.trace.append(result)
+        state.agent_outputs[self.name] = result.outputs
+        update_metrics(state.metrics, result.state_delta)
+        state.route.selected_path.append(self.name)
+
+
+# ============================================================
+# Node implementations
+# ============================================================
+
+
+class PromptIntakeNode(BaseNode):
+    name = "prompt_intake_node"
+    node_type = NodeType.INTAKE
+
+    def process(self, state: DWState):
+        text = state.user_input.lower()
+
+        task_scores: Dict[TaskType, float] = defaultdict(float)
+        task_scores[TaskType.UNKNOWN] = 0.1
+
+        if "master agent" in text or "meta-controller" in text or "meta controller" in text:
+            task_scores[TaskType.META_SYSTEM] += 1.2
+        if any(k in text for k in ["design", "architecture", "node map", "langgraph", "scaffold", "runtime"]):
+            task_scores[TaskType.DESIGN] += 1.0
+        if any(k in text for k in ["simulate", "equation", "trajectory", "dynamics"]):
+            task_scores[TaskType.SIMULATION] += 1.0
+        if any(k in text for k in ["research", "evidence", "facts", "verify", "benchmark"]):
+            task_scores[TaskType.RESEARCH] += 1.0
+        if any(k in text for k in ["symbolic", "spiritual", "divine", "theological"]):
+            task_scores[TaskType.SYMBOLIC] += 1.0
+
+        strong_types = [k for k, v in task_scores.items() if k != TaskType.UNKNOWN and v >= 1.0]
+        if len(strong_types) >= 2:
+            task_type = TaskType.MIXED
+        else:
+            task_type = max(task_scores.items(), key=lambda kv: kv[1])[0]
+
+        requested_output: List[str] = []
+        for token, label in [
+            ("json", "json_contracts"),
+            ("python", "python_scaffold"),
+            ("diagram", "diagram"),
+            ("evaluation", "evaluation_loop"),
+            ("training", "training_runtime"),
+            ("benchmark", "benchmark_harness"),
+            ("test", "tests"),
+        ]:
+            if token in text:
+                requested_output.append(label)
+
+        ambiguity = 0.15 if len(text) > 40 else 0.45
+        if "improve" in text and "all" in text:
+            ambiguity += 0.08
+        if len(strong_types) >= 2:
+            ambiguity += 0.06
+
+        domain_tags = infer_domain_tags(state.user_input)
+
+        outputs = {
+            "task_class": task_type.value,
+            "requested_output": requested_output,
+            "inferred_goals": [
+                "improve system quality",
+                "increase orchestration intelligence",
+                "enable learning across runs",
+            ],
+            "risk_profile": {
+                "ambiguity": clamp(ambiguity),
+                "contradiction_risk": 0.15,
+                "hallucination_risk": 0.10,
+            },
+            "domain_tags": domain_tags,
+        }
+
+        state.task_type = task_type
+        state.context.goals = outputs["inferred_goals"]
+        state.context.domain_tags = domain_tags
+
+        delta = StateDelta(
+            clarity_delta=0.08,
+            goal_alignment_delta=0.12,
+            completion_readiness_delta=0.04,
+        )
+        recs = Recommendations(next_nodes=["context_reconstruction_node"], reason="Task structure extracted")
+        return outputs, delta, recs, 0.93, 0.10
+
+
+class ContextReconstructionNode(BaseNode):
+    name = "context_reconstruction_node"
+    node_type = NodeType.INTAKE
+    required_outputs = ("prompt_intake_node",)
+
+    def __init__(self, memory: RouteMemory):
+        self.memory = memory
+
+    def process(self, state: DWState):
+        signature = task_signature_from_state(state)
+        best_paths = self.memory.best_paths_for_signature(signature)
+        hints = {
+            "best_known_paths": [r.path for r in best_paths],
+            "prior_avg_systems_design": self.memory.avg_node_utility("systems_design_node"),
+            "prior_avg_coherence": self.memory.avg_node_utility("coherence_node"),
+        }
+
+        has_prior_memory = len(best_paths) > 0
+        state.memory_hints = hints
+        state.context.memory_summary = (
+            "Recovered prior route hints and node utility history."
+            if has_prior_memory
+            else "No prior memory available."
+        )
+
+        outputs = {
+            "memory_summary": state.context.memory_summary,
+            "route_hints": hints,
+        }
+        delta = StateDelta(coherence_delta=0.05, clarity_delta=0.04)
+        recs = Recommendations(next_nodes=["signal_detection_node"], reason="Prior route memory injected")
+        return outputs, delta, recs, 0.87, 0.08
+
+
+class SignalDetectionNode(BaseNode):
+    name = "signal_detection_node"
+    node_type = NodeType.ANALYSIS
+    required_outputs = ("prompt_intake_node", "context_reconstruction_node")
+
+    def process(self, state: DWState):
+        text = state.user_input
+        primary = "Build a self-improving master-agent runtime scaffold"
+        systemic = "Transform Divine Whisper into a measured adaptive cognition system"
+        optimization_target = "maximize clarity, coherence, and route efficiency"
+
+        secondary = []
+        for item in [
+            "typed state",
+            "node stubs",
+            "scoring functions",
+            "route memory",
+            "policy updates",
+            "master ingestion",
+            "benchmark",
+            "tests",
+        ]:
+            if item in text.lower() or item.replace(" ", "_") in text.lower():
+                secondary.append(item)
+
+        ambiguity = clamp(0.2 - 0.02 * len(secondary), 0.05, 0.35)
+        state.signals = SignalState(
+            primary_signal=primary,
+            secondary_signals=secondary,
+            noise_items=[],
+            ambiguity_score=ambiguity,
+            systemic_signal=systemic,
+            optimization_target=optimization_target,
+        )
+        outputs = asdict(state.signals)
+        delta = StateDelta(clarity_delta=0.14, goal_alignment_delta=0.10, distortion_delta=-0.03)
+        recs = Recommendations(next_nodes=["distortion_detection_node"], reason="Primary and systemic signals extracted")
+        return outputs, delta, recs, 0.95, 0.09
+
+
+class DistortionDetectionNode(BaseNode):
+    name = "distortion_detection_node"
+    node_type = NodeType.ANALYSIS
+    required_outputs = ("signal_detection_node",)
+
+    def process(self, state: DWState):
+        risks = []
+        if state.signals.ambiguity_score > 0.3:
+            risks.append("semantic_distortion")
+        if state.task_type in {TaskType.MIXED, TaskType.UNKNOWN}:
+            risks.append("routing_distortion")
+        if "symbolic" in state.user_input.lower() and "python" in state.user_input.lower():
+            risks.append("mode_blending_risk")
+
+        contradiction_pressure = 0.15 + 0.10 * len(risks)
+        outputs = {
+            "distortion_risks": risks,
+            "contradiction_pressure": contradiction_pressure,
+            "recommended_corrections": [
+                "favor design-first route",
+                "insert coherence gate before finalization",
+            ],
+        }
+        state.reasoning.contradictions = risks
+        delta = StateDelta(distortion_delta=-0.08, coherence_delta=0.06)
+        recs = Recommendations(next_nodes=["orchestrator_node"], reason="Distortion profile prepared for routing")
+        return outputs, delta, recs, 0.89, 0.07
+
+
+class OrchestratorNode(BaseNode):
+    name = "orchestrator_node"
+    node_type = NodeType.CONTROLLER
+
+    def process(self, state: DWState):
+        outputs = {"decision": "routing handled externally"}
+        delta = StateDelta()
+        recs = Recommendations(reason="Use runtime routing function")
+        return outputs, delta, recs, 1.0, 0.01
+
+
+class PlannerNode(BaseNode):
+    name = "planner_node"
+    node_type = NodeType.CONTROLLER
+    required_outputs = ("orchestrator_node",)
+
+    def __init__(self, memory: RouteMemory):
+        self.memory = memory
+
+    def process(self, state: DWState):
+        candidate_routes = generate_candidate_routes(state)
+        scored_routes: List[Dict[str, Any]] = []
+
+        for route in candidate_routes:
+            predicted_quality = predict_route_quality(state, route, memory=self.memory)
+            predicted_cost = predict_route_cost(route)
+            predicted_score = clamp(predicted_quality - predicted_cost)
+
+            task_signature = task_signature_from_state(state)
+            avg_error = self.memory.avg_planner_error_for_route(task_signature, route)
+            avg_regret = self.memory.avg_historical_regret_for_route(task_signature, route)
+
+            scored_routes.append(
+                {
+                    "route": route,
+                    "predicted_quality": predicted_quality,
+                    "predicted_cost": predicted_cost,
+                    "predicted_score": predicted_score,
+                    "historical_prediction_error": avg_error,
+                    "historical_regret": avg_regret,
+                }
+            )
+
+        scored_routes.sort(key=lambda x: x["predicted_score"], reverse=True)
+        best = scored_routes[0]
+
+        outputs = {
+            "candidate_routes": scored_routes,
+            "selected_route": best["route"],
+            "planner_confidence": best["predicted_score"],
+            "selected_prediction": {
+                "predicted_quality": best["predicted_quality"],
+                "predicted_cost": best["predicted_cost"],
+                "predicted_score": best["predicted_score"],
+            },
+        }
+        delta = StateDelta(clarity_delta=0.04, completion_readiness_delta=0.04)
+        recs = Recommendations(reason="Planner selected highest-value route")
+        return outputs, delta, recs, 0.90, 0.08
+
+
+class ResearchNode(BaseNode):
+    name = "research_node"
+    node_type = NodeType.SPECIALIST
+
+    def process(self, state: DWState):
+        outputs = {
+            "evidence_bundle": [
+                "Existing chat data points toward a meta-controller architecture.",
+                "Repeated need for typed state, route scoring, and evaluation loop.",
+            ],
+            "claims": [
+                "The system benefits from design-first routing.",
+                "Evaluation and feedback loops are central to quality gains.",
+            ],
+            "unresolved_claims": ["Exact benchmark thresholds need empirical tuning."],
+        }
+        delta = StateDelta(evidence_delta=0.18, clarity_delta=0.06)
+        recs = Recommendations(next_nodes=["truth_evidence_node"], reason="Research evidence collected")
+        return outputs, delta, recs, 0.84, 0.14
+
+
+class SystemsDesignNode(BaseNode):
+    name = "systems_design_node"
+    node_type = NodeType.SPECIALIST
+
+    def process(self, state: DWState):
+        outputs = {
+            "components": [
+                "typed state",
+                "node registry",
+                "orchestrator",
+                "planner",
+                "evaluator",
+                "route memory",
+                "planner prediction error memory",
+                "master agent",
+                "benchmark harness",
+                "test hooks",
+            ],
+            "interfaces": [
+                "NodeResult",
+                "NodeScore",
+                "PolicyUpdate",
+                "PlannerRecord",
+            ],
+            "routing_logic": [
+                "planner generates and scores route candidates",
+                "planner prediction error calibrates future route selection",
+                "design-first for architecture tasks",
+                "research-first when evidence is weak",
+                "conflict path when contradictions exceed threshold",
+            ],
+            "failure_modes": [
+                "weak route selection",
+                "high latency low gain nodes",
+                "output bloat",
+                "miscalibrated route predictor",
+            ],
+            "observability": [
+                "node trace",
+                "edge trace",
+                "quality score",
+                "policy history",
+                "planner candidate routes",
+                "prediction error",
+                "historical regret",
+            ],
+        }
+        delta = StateDelta(
+            clarity_delta=0.20,
+            coherence_delta=0.15,
+            goal_alignment_delta=0.14,
+            completion_readiness_delta=0.08,
+        )
+        recs = Recommendations(
+            next_nodes=["simulation_modeling_node", "coherence_node"],
+            reason="System design skeleton produced",
+        )
+        return outputs, delta, recs, 0.94, 0.22
+
+
+class SimulationModelingNode(BaseNode):
+    name = "simulation_modeling_node"
+    node_type = NodeType.SPECIALIST
+
+    def process(self, state: DWState):
+        outputs = {
+            "state_variables": [
+                "clarity",
+                "coherence",
+                "distortion",
+                "evidence",
+                "goal_alignment",
+                "completion_readiness",
+                "prediction_error",
+                "historical_regret",
+            ],
+            "scoring_functions": {
+                "node_contribution": "weighted delta minus penalties",
+                "run_quality": "weighted post-state minus distortion and latency penalties",
+                "route_prediction": "predicted_quality minus predicted_cost",
+                "planner_error": "actual_quality minus predicted_score",
+            },
+            "thresholds": {
+                "quality_pass": state.master_control.threshold_quality,
+                "conflict_trigger": state.master_control.threshold_conflict,
+            },
+            "test_scenarios": [
+                "design-heavy prompt",
+                "research-heavy prompt",
+                "mixed symbolic + design prompt",
+                "planner route competition",
+                "prediction calibration",
+            ],
+        }
+        delta = StateDelta(
+            clarity_delta=0.13,
+            coherence_delta=0.12,
+            novelty_delta=0.09,
+            completion_readiness_delta=0.09,
+        )
+        recs = Recommendations(next_nodes=["coherence_node"], reason="Formal runtime model produced")
+        return outputs, delta, recs, 0.92, 0.20
+
+
+class MeaningSynthesisNode(BaseNode):
+    name = "meaning_synthesis_node"
+    node_type = NodeType.SPECIALIST
+
+    def process(self, state: DWState):
+        outputs = {
+            "integrated_model": (
+                "Divine Whisper operates best as a hierarchical cognition runtime in which specialized nodes compute, "
+                "evaluators measure, a planner compares candidate routes, planner prediction error calibrates future search, "
+                "and a master agent learns from full execution traces."
+            ),
+            "unresolved_tensions": [
+                "Empirical calibration still required for edge weights, predictor quality, and thresholds."
+            ],
+            "recommended_next_route": "coherence_node",
+        }
+        delta = StateDelta(clarity_delta=0.10, coherence_delta=0.11, goal_alignment_delta=0.08)
+        recs = Recommendations(next_nodes=["coherence_node"], reason="Integrated interpretation assembled")
+        return outputs, delta, recs, 0.88, 0.12
+
+
+class SymbolicSpiritualNode(BaseNode):
+    name = "symbolic_spiritual_node"
+    node_type = NodeType.SPECIALIST
+
+    def process(self, state: DWState):
+        outputs = {
+            "symbolic_frame": "Master agent as governing discernment layer over a distributed field of specialized cognition.",
+            "mode": "symbolic_support_mode",
+            "constraint": "Support architecture, do not dominate formal system design.",
+        }
+        delta = StateDelta(novelty_delta=0.06, goal_alignment_delta=0.03)
+        recs = Recommendations(next_nodes=["meaning_synthesis_node"], reason="Symbolic support layer added")
+        return outputs, delta, recs, 0.76, 0.09
+
+
+class TruthEvidenceNode(BaseNode):
+    name = "truth_evidence_node"
+    node_type = NodeType.CONTROL
+    required_outputs = ("research_node",)
+
+    def process(self, state: DWState):
+        supported_claims = state.agent_outputs.get("research_node", {}).get("claims", [])
+        unsupported = []
+        if not supported_claims:
+            unsupported.append("No explicit evidence bundle collected in this run.")
+
+        outputs = {
+            "supported_claims": supported_claims,
+            "unsupported_claims": unsupported,
+            "evidence_coverage_score": 0.75 if not unsupported else 0.45,
+            "verification_recommendations": ["Run evidence path for externally grounded claims."],
+        }
+        delta = StateDelta(evidence_delta=0.10, coherence_delta=0.04)
+        recs = Recommendations(next_nodes=["coherence_node"], reason="Evidence gate completed")
+        return outputs, delta, recs, 0.85, 0.08
+
+
+class CoherenceNode(BaseNode):
+    name = "coherence_node"
+    node_type = NodeType.CONTROL
+
+    def process(self, state: DWState):
+        contradiction_count = len(state.reasoning.contradictions)
+        coherence_gain = 0.18 if contradiction_count <= 1 else 0.08
+
+        outputs = {
+            "coherence_score": clamp(state.metrics.coherence + coherence_gain),
+            "contradiction_count": contradiction_count,
+            "merge_recommendation": "finalize" if contradiction_count == 0 else "conflict_or_compress",
+        }
+        delta = StateDelta(
+            coherence_delta=coherence_gain,
+            clarity_delta=0.09,
+            distortion_delta=-0.05,
+            completion_readiness_delta=0.10,
+        )
+        recs = Recommendations(
+            next_nodes=["compression_node"] if contradiction_count <= 1 else ["conflict_resolver_node"],
+            reroute=contradiction_count > 2,
+            reason="Cross-node coherence evaluated",
+        )
+        return outputs, delta, recs, 0.93, 0.10
+
+
+class ConflictResolverNode(BaseNode):
+    name = "conflict_resolver_node"
+    node_type = NodeType.CONTROL
+
+    def process(self, state: DWState):
+        conflicts = state.reasoning.contradictions
+        outputs = {
+            "winning_branch": "design_first_runtime_path",
+            "merged_branch": "design with optional symbolic support",
+            "unresolved_conflicts": conflicts[:1],
+            "escalation_necessity": len(conflicts) > 2,
+        }
+        delta = StateDelta(coherence_delta=0.10, distortion_delta=-0.06, clarity_delta=0.05)
+        recs = Recommendations(next_nodes=["compression_node"], escalate=len(conflicts) > 2, reason="Conflict reduced")
+        return outputs, delta, recs, 0.81, 0.11
+
+
+class CompressionNode(BaseNode):
+    name = "compression_node"
+    node_type = NodeType.CONTROL
+
+    def process(self, state: DWState):
+        outputs = {
+            "compressed_summary": (
+                "Typed runtime scaffold with planner, prediction-error learning, evaluation loop, "
+                "route memory, and master policy updates."
+            ),
+            "preserved_points": [
+                "typed state",
+                "node scoring",
+                "planner route search",
+                "planner prediction error",
+                "route memory",
+                "master learning loop",
+            ],
+            "dropped_detail_count": 3,
+        }
+        delta = StateDelta(compression_delta=0.20, clarity_delta=0.06, completion_readiness_delta=0.05)
+        recs = Recommendations(next_nodes=["formatter_node"], reason="High-value structure compressed")
+        return outputs, delta, recs, 0.90, 0.06
+
+
+class FormatterNode(BaseNode):
+    name = "formatter_node"
+    node_type = NodeType.OUTPUT
+
+    def process(self, state: DWState):
+        answer = (
+            "Divine Whisper Master-Agent Training Runtime v7 scaffold assembled with typed state, node contracts, "
+            "PlannerNode route search, prediction-error learning, historical regret tracking, per-loop learning, "
+            "persistence hooks, and adaptive policy updates."
+        )
+        confidence = clamp((state.metrics.clarity + state.metrics.coherence + state.metrics.goal_alignment) / 3.0)
+        state.final_output = FinalOutputState(answer=answer, confidence=confidence)
+        outputs = asdict(state.final_output)
+        delta = StateDelta(completion_readiness_delta=0.12, goal_alignment_delta=0.05)
+        recs = Recommendations(next_nodes=["evaluator_node"], reason="Formatted final candidate output")
+        return outputs, delta, recs, confidence, 0.05
+
+
+class EvaluatorNode(BaseNode):
+    name = "evaluator_node"
+    node_type = NodeType.EVALUATION
+
+    def process(self, state: DWState):
+        quality = score_run_quality(
+            state.metrics,
+            path_length=len(state.route.selected_path),
+            loop_count=state.route.loop_count,
+        )
+        failure_modes = []
+
+        if state.metrics.evidence < 0.35 and state.task_type in {TaskType.RESEARCH, TaskType.MIXED}:
+            failure_modes.append("low_evidence")
+        if state.metrics.coherence < 0.55:
+            failure_modes.append("low_coherence")
+        if state.metrics.distortion > 0.45:
+            failure_modes.append("high_distortion")
+
+        passed = quality >= state.master_control.threshold_quality and not failure_modes
+        rerun = not passed and state.route.loop_count < state.route.max_loops
+
+        state.evaluation = EvaluationState(
+            passed=passed,
+            failure_modes=failure_modes,
+            improvement_delta={
+                "clarity": state.metrics.clarity,
+                "coherence": state.metrics.coherence,
+                "distortion": -state.metrics.distortion,
+                "evidence": state.metrics.evidence,
+                "goal_alignment": state.metrics.goal_alignment,
+                "completion_readiness": state.metrics.completion_readiness,
+            },
+            rerun_recommended=rerun,
+            overall_quality=quality,
+        )
+        outputs = asdict(state.evaluation)
+        delta = StateDelta()
+        recs = Recommendations(next_nodes=["feedback_aggregator_node"], reroute=rerun, reason="Run evaluated")
+        return outputs, delta, recs, 0.96, 0.09
+
+
+class FeedbackAggregatorNode(BaseNode):
+    name = "feedback_aggregator_node"
+    node_type = NodeType.EVALUATION
+
+    def process(self, state: DWState):
+        latest_rankings = sorted(
+            (
+                (name, scores[-1].total)
+                for name, scores in state.agent_scores.items()
+                if scores
+            ),
+            key=lambda x: x[1],
+            reverse=True,
+        )
+
+        planner_output = state.agent_outputs.get("planner_node", {})
+        selected_prediction = planner_output.get("selected_prediction", {})
+        predicted_score = selected_prediction.get("predicted_score", 0.0)
+        actual_quality = state.evaluation.overall_quality
+        prediction_error = actual_quality - predicted_score
+
+        outputs = {
+            "overall_quality": state.evaluation.overall_quality,
+            "node_rankings": latest_rankings,
+            "failure_modes": state.evaluation.failure_modes,
+            "route_efficiency": score_route_efficiency(state),
+            "reroute_reasons": list(state.route.reroute_reasons),
+            "planner_selected_route": planner_output.get("selected_route", []),
+            "planner_candidate_count": len(planner_output.get("candidate_routes", [])),
+            "predicted_score": predicted_score,
+            "actual_quality": actual_quality,
+            "prediction_error": prediction_error,
+        }
+        delta = StateDelta()
+        recs = Recommendations(next_nodes=["master_agent_node"], reason="Feedback packet assembled")
+        return outputs, delta, recs, 0.91, 0.04
+
+
+class MasterAgentNode(BaseNode):
+    name = "master_agent_node"
+    node_type = NodeType.CONTROLLER
+
+    def __init__(self, memory: RouteMemory):
+        self.memory = memory
+
+    def process(self, state: DWState):
+        loop_id = state.route.loop_count
+        loop_scores = state.agent_scores_by_loop.get(loop_id, {})
+        loop_edges = state.edge_trace_by_loop.get(loop_id, [])
+
+        node_updates: Dict[str, float] = {}
+        edge_updates: Dict[str, float] = {}
+        notes: List[str] = []
+
+        for name, scores in loop_scores.items():
+            if not scores:
+                continue
+            latest_total = scores[-1].total
+            historical = state.agent_scores.get(name, [])
+            historical_avg = sum(s.total for s in historical) / len(historical) if historical else latest_total
+            blended = 0.7 * latest_total + 0.3 * historical_avg
+
+            if blended > 0.75:
+                node_updates[name] = 0.05
+            elif blended < 0.45:
+                node_updates[name] = -0.04
+
+        for edge in loop_edges:
+            key = f"{edge.from_node}->{edge.to_node}"
+            if edge.success and edge.downstream_gain > 0.12:
+                edge_updates[key] = max(edge_updates.get(key, 0.0), 0.04)
+            elif not edge.success or edge.downstream_gain < 0.03:
+                edge_updates[key] = min(edge_updates.get(key, 0.0), -0.03)
+
+        feedback = state.agent_outputs.get("feedback_aggregator_node", {})
+        prediction_error = feedback.get("prediction_error", 0.0)
+
+        if abs(prediction_error) > 0.15:
+            notes.append("Planner calibration drift detected.")
+            planner_weight = state.master_control.priority_weights.get("planner_node", 0.0)
+            state.master_control.priority_weights["planner_node"] = planner_weight - 0.01
+
+        quality = state.evaluation.overall_quality
+        if state.task_type in {TaskType.DESIGN, TaskType.META_SYSTEM}:
+            new_mode = PolicyMode.DESIGN_FIRST
+        elif state.task_type == TaskType.RESEARCH:
+            new_mode = PolicyMode.RESEARCH_FIRST
+        else:
+            new_mode = PolicyMode.COHERENCE_HEAVY if state.metrics.coherence < 0.6 else PolicyMode.BALANCED
+
+        stop_decision = state.evaluation.passed
+        reroute_decision = state.evaluation.rerun_recommended and not stop_decision
+
+        if quality < 0.55:
+            notes.append("Raise design/coherence path priority.")
+        if state.metrics.distortion > 0.35:
+            notes.append("Insert conflict or coherence control earlier.")
+        if state.metrics.compression < 0.15:
+            notes.append("Route through compression before finalize.")
+
+        threshold_quality = clamp(
+            state.master_control.threshold_quality + (0.01 if quality > 0.85 else -0.01 if quality < 0.55 else 0.0),
+            0.55,
+            0.85,
+        )
+
+        state.master_control.policy_mode = new_mode
+        state.master_control.stop_decision = stop_decision
+        state.master_control.reroute_decision = reroute_decision
+        state.master_control.threshold_quality = threshold_quality
+
+        for k, v in node_updates.items():
+            state.master_control.priority_weights[k] = state.master_control.priority_weights.get(k, 0.0) + v
+        for k, v in edge_updates.items():
+            state.master_control.edge_weights[k] = state.master_control.edge_weights.get(k, 0.0) + v
+
+        update = PolicyUpdate(
+            policy_mode=new_mode,
+            node_priority_updates=node_updates,
+            edge_weight_updates=edge_updates,
+            threshold_quality=threshold_quality,
+            notes=notes,
+        )
+        self.memory.policy_history.append(update)
+
+        outputs = {
+            "policy_mode": new_mode.value,
+            "node_priority_updates": node_updates,
+            "edge_weight_updates": edge_updates,
+            "stop_decision": stop_decision,
+            "reroute_decision": reroute_decision,
+            "threshold_quality": threshold_quality,
+            "notes": notes,
+            "learning_loop": loop_id,
+            "prediction_error": prediction_error,
+        }
+        delta = StateDelta()
+        recs = Recommendations(
+            next_nodes=["memory_update_node"],
+            reroute=reroute_decision,
+            reason="Meta-policy updated from current loop, historical trace, and planner prediction error",
+        )
+        return outputs, delta, recs, 0.94, 0.14
+
+
+class MemoryUpdateNode(BaseNode):
+    name = "memory_update_node"
+    node_type = NodeType.MEMORY
+
+    def __init__(self, memory: RouteMemory):
+        self.memory = memory
+
+    def process(self, state: DWState):
+        signature = task_signature_from_state(state)
+        loop_id = state.route.loop_count
+
+        if state.evaluation.passed and state.route.successful_path:
+            stored_path = list(state.route.successful_path)
+        elif state.route.loop_paths:
+            stored_path = list(state.route.loop_paths[-1])
+        else:
+            stored_path = list(state.route.selected_path)
+
+        self.memory.remember_route(
+            RouteRecord(
+                task_signature=signature,
+                path=stored_path,
+                overall_quality=state.evaluation.overall_quality,
+                passed=state.evaluation.passed,
+                loop_count=state.route.loop_count,
+                timestamp=time.time(),
+            )
+        )
+
+        planner_output = state.agent_outputs.get("planner_node", {})
+        selected_prediction = planner_output.get("selected_prediction", {})
+        predicted_quality = selected_prediction.get("predicted_quality", 0.0)
+        predicted_cost = selected_prediction.get("predicted_cost", 0.0)
+        predicted_score = selected_prediction.get("predicted_score", 0.0)
+        actual_quality = state.evaluation.overall_quality
+        prediction_error = actual_quality - predicted_score
+
+        historical_regret = 0.0
+        if self.memory.planner_history.get(signature):
+            best_hist = max(
+                (r.actual_quality for r in self.memory.planner_history[signature]),
+                default=actual_quality,
+            )
+            historical_regret = max(0.0, best_hist - actual_quality)
+
+        self.memory.remember_planner(
+            PlannerRecord(
+                task_signature=signature,
+                selected_route=planner_output.get("selected_route", []),
+                predicted_quality=predicted_quality,
+                predicted_cost=predicted_cost,
+                predicted_score=predicted_score,
+                actual_quality=actual_quality,
+                prediction_error=prediction_error,
+                historical_regret=historical_regret,
+                timestamp=time.time(),
+            )
+        )
+
+        loop_scores = state.agent_scores_by_loop.get(loop_id, {})
+        for name, scores in loop_scores.items():
+            for score in scores:
+                self.memory.remember_node_score(name, score.total)
+
+        loop_edges = state.edge_trace_by_loop.get(loop_id, [])
+        for edge in loop_edges:
+            self.memory.remember_edge_score(edge.from_node, edge.to_node, edge.downstream_gain)
+
+        outputs = {
+            "route_memory_updated": True,
+            "planner_memory_updated": True,
+            "task_signature": signature,
+            "stored_path_length": len(stored_path),
+            "prediction_error": prediction_error,
+            "historical_regret": historical_regret,
+        }
+        delta = StateDelta()
+        recs = Recommendations(reason="Learning memory updated with regret signal")
+        return outputs, delta, recs, 0.92, 0.05
+
+
+# ============================================================
+# Runtime
+# ============================================================
+
+
+class MasterAgentRuntime:
+    def __init__(self, memory: Optional[RouteMemory] = None, memory_path: Optional[str] = None):
+        self.memory_path = memory_path
+        if memory is not None:
+            self.memory = memory
+        elif memory_path:
+            self.memory = RouteMemory.load_json(memory_path)
+        else:
+            self.memory = RouteMemory()
+
+        self.nodes: Dict[str, BaseNode] = {
+            "prompt_intake_node": PromptIntakeNode(),
+            "context_reconstruction_node": ContextReconstructionNode(self.memory),
+            "signal_detection_node": SignalDetectionNode(),
+            "distortion_detection_node": DistortionDetectionNode(),
+            "orchestrator_node": OrchestratorNode(),
+            "planner_node": PlannerNode(self.memory),
+            "research_node": ResearchNode(),
+            "systems_design_node": SystemsDesignNode(),
+            "simulation_modeling_node": SimulationModelingNode(),
+            "meaning_synthesis_node": MeaningSynthesisNode(),
+            "symbolic_spiritual_node": SymbolicSpiritualNode(),
+            "truth_evidence_node": TruthEvidenceNode(),
+            "coherence_node": CoherenceNode(),
+            "conflict_resolver_node": ConflictResolverNode(),
+            "compression_node": CompressionNode(),
+            "formatter_node": FormatterNode(),
+            "evaluator_node": EvaluatorNode(),
+            "feedback_aggregator_node": FeedbackAggregatorNode(),
+            "master_agent_node": MasterAgentNode(self.memory),
+            "memory_update_node": MemoryUpdateNode(self.memory),
+        }
+
+    def new_state(self, user_input: str, session_id: str = "default") -> DWState:
+        return DWState(
+            run_id=unique_run_id(),
+            session_id=session_id,
+            user_input=user_input,
+            master_control=MasterControlState(
+                policy_mode=PolicyMode.BALANCED,
+                priority_weights={
+                    "systems_design_node": 0.10,
+                    "coherence_node": 0.08,
+                    "evaluator_node": 0.08,
+                    "planner_node": 0.10,
+                },
+                edge_weights={},
+                threshold_quality=0.62,
+            ),
+        )
+
+    def persist_memory(self) -> None:
+        if self.memory_path:
+            self.memory.save_json(self.memory_path)
+
+    def validate_route(self, state: DWState, route: List[str]) -> None:
+        available = set(state.agent_outputs.keys())
+        for node_name in route:
+            node = self.nodes[node_name]
+            missing = [req for req in node.required_outputs if req not in available]
+            if missing:
+                raise RuntimeError(f"Invalid planned route: {node_name} requires {missing}")
+            available.add(node_name)
+
+    def execute_node(self, state: DWState, node_name: str) -> NodeResult:
+        prev_name = state.route.selected_path[-1] if state.route.selected_path else "START"
+        result = self.nodes[node_name].run(state)
+
+        contradictions = len(state.reasoning.contradictions)
+        score = score_node_result(result, contradictions=contradictions)
+
+        state.agent_scores.setdefault(node_name, []).append(score)
+        loop_scores = state.agent_scores_by_loop.setdefault(state.route.loop_count, {})
+        loop_scores.setdefault(node_name, []).append(score)
+
+        distortion_gain = max(0.0, -result.state_delta.distortion_delta)
+        downstream_gain = max(
+            0.0,
+            result.state_delta.clarity_delta
+            + result.state_delta.coherence_delta
+            + result.state_delta.evidence_delta
+            + result.state_delta.goal_alignment_delta
+            + result.state_delta.completion_readiness_delta
+            + distortion_gain
+        )
+
+        edge = EdgeScore(
+            from_node=prev_name,
+            to_node=node_name,
+            traversed=True,
+            downstream_gain=downstream_gain,
+            success=score.total >= 0.45,
+        )
+        state.edge_trace.append(edge)
+        state.edge_trace_by_loop.setdefault(state.route.loop_count, []).append(edge)
+        return result
+
+    def record_reroute_reason(self, state: DWState) -> None:
+        if state.evaluation.failure_modes:
+            reason = f"reroute_after_loop_{state.route.loop_count + 1}: " + ",".join(state.evaluation.failure_modes)
+        else:
+            reason = f"reroute_after_loop_{state.route.loop_count + 1}: threshold_not_met"
+        state.route.reroute_reasons.append(reason)
+
+    def run(self, user_input: str, session_id: str = "default") -> DWState:
+        state = self.new_state(user_input=user_input, session_id=session_id)
+
+        for node_name in [
+            "prompt_intake_node",
+            "context_reconstruction_node",
+            "signal_detection_node",
+            "distortion_detection_node",
+        ]:
+            state.task_phase = TaskPhase.ANALYSIS if "detection" in node_name else TaskPhase.INTAKE
+            self.execute_node(state, node_name)
+
+        while True:
+            loop_start_idx = len(state.route.selected_path)
+
+            state.task_phase = TaskPhase.ROUTING
+            self.execute_node(state, "orchestrator_node")
+            self.execute_node(state, "planner_node")
+
+            planner_output = state.agent_outputs["planner_node"]
+            specialist_route = planner_output["selected_route"]
+
+            self.validate_route(state, specialist_route)
+            state.route.planned_path = list(specialist_route)
+            state.route.candidate_paths.append(list(specialist_route))
+            state.route.planner_candidates_history.append(list(planner_output["candidate_routes"]))
+
+            state.task_phase = TaskPhase.EXECUTION
+            for node_name in specialist_route:
+                self.execute_node(state, node_name)
+
+            if "formatter_node" not in specialist_route:
+                self.execute_node(state, "formatter_node")
+
+            state.task_phase = TaskPhase.EVALUATION
+            for node_name in [
+                "evaluator_node",
+                "feedback_aggregator_node",
+                "master_agent_node",
+            ]:
+                self.execute_node(state, node_name)
+
+            loop_path = state.route.selected_path[loop_start_idx:]
+            state.route.loop_paths.append(loop_path)
+
+            if state.evaluation.passed:
+                state.route.successful_path = list(loop_path)
+
+            self.execute_node(state, "memory_update_node")
+            self.persist_memory()
+
+            if state.master_control.stop_decision or state.route.loop_count >= state.route.max_loops:
+                break
+
+            self.record_reroute_reason(state)
+            state.route.loop_count += 1
+
+        state.task_phase = TaskPhase.FINALIZATION
+        return state
+
+
+# ============================================================
+# Benchmarks / tests
+# ============================================================
+
+
+def benchmark_runtime(runtime: MasterAgentRuntime) -> List[Dict[str, Any]]:
+    prompts = [
+        "Design a LangGraph-style master agent scaffold with route memory and policy updates.",
+        "Research the best evaluation loop structure for a multi-agent runtime and score route quality.",
+        "Create a symbolic + systems synthesis for Divine Whisper and route through coherence.",
+    ]
+
+    results = []
+    for idx, prompt in enumerate(prompts, start=1):
+        state = runtime.run(prompt, session_id=f"benchmark_{idx}")
+        planner_output = state.agent_outputs.get("planner_node", {})
+        feedback_output = state.agent_outputs.get("feedback_aggregator_node", {})
+        results.append(
+            {
+                "run_id": state.run_id,
+                "task_type": state.task_type.value,
+                "quality": state.evaluation.overall_quality,
+                "passed": state.evaluation.passed,
+                "planned_path": state.route.planned_path,
+                "executed_path": state.route.selected_path,
+                "successful_path": state.route.successful_path,
+                "loop_paths": state.route.loop_paths,
+                "planner_selected_route": planner_output.get("selected_route", []),
+                "planner_candidate_count": len(planner_output.get("candidate_routes", [])),
+                "prediction_error": feedback_output.get("prediction_error", 0.0),
+                "policy_mode": state.master_control.policy_mode.value,
+                "final_confidence": state.final_output.confidence,
+                "reroute_reasons": state.route.reroute_reasons,
+            }
+        )
+    return results
+
+
+def _test_distortion_credit() -> None:
+    result = NodeResult(
+        node_name="test_node",
+        node_type=NodeType.ANALYSIS,
+        run_id="x",
+        task_phase=TaskPhase.ANALYSIS,
+        inputs={},
+        outputs={},
+        state_delta=StateDelta(distortion_delta=-0.10, clarity_delta=0.05),
+        recommendations=Recommendations(),
+        confidence=0.8,
+        latency_s=0.01,
+        complexity_cost=0.01,
+    )
+    score = score_node_result(result)
+    assert score.total > 0.0
+
+
+def _test_domain_tags() -> None:
+    tags = infer_domain_tags("Build a Python runtime scaffold with route memory and evaluation.")
+    assert "python" in tags
+    assert "memory" in tags
+    assert "evaluation" in tags
+
+
+def _test_route_validation() -> None:
+    runtime = MasterAgentRuntime()
+    state = runtime.new_state("research prompt")
+    state.agent_outputs["prompt_intake_node"] = {}
+    try:
+        runtime.validate_route(state, ["truth_evidence_node"])
+    except RuntimeError:
+        return
+    raise AssertionError("validate_route should fail when prerequisites are missing")
+
+
+def _test_planner_generates_routes() -> None:
+    runtime = MasterAgentRuntime()
+    state = runtime.new_state("Design a Python scaffold with evaluation and route memory.")
+    for node_name in [
+        "prompt_intake_node",
+        "context_reconstruction_node",
+        "signal_detection_node",
+        "distortion_detection_node",
+        "orchestrator_node",
+        "planner_node",
+    ]:
+        state.task_phase = TaskPhase.ROUTING if node_name in {"orchestrator_node", "planner_node"} else TaskPhase.ANALYSIS
+        runtime.execute_node(state, node_name)
+
+    planner_output = state.agent_outputs["planner_node"]
+    assert planner_output["selected_route"]
+    assert len(planner_output["candidate_routes"]) >= 1
+
+
+def _test_runtime_executes() -> None:
+    runtime = MasterAgentRuntime()
+    state = runtime.run("Design a Python master-agent scaffold with scoring and memory.")
+    assert state.final_output.answer
+    assert len(state.route.selected_path) > 0
+    assert "planner_node" in state.agent_outputs
+
+
+def _test_prediction_error_is_computed() -> None:
+    runtime = MasterAgentRuntime()
+    state = runtime.run("Design a Python master-agent scaffold with scoring and memory.")
+    feedback = state.agent_outputs.get("feedback_aggregator_node", {})
+    assert "prediction_error" in feedback
+
+
+def run_tests() -> None:
+    _test_distortion_credit()
+    _test_domain_tags()
+    _test_route_validation()
+    _test_planner_generates_routes()
+    _test_runtime_executes()
+    _test_prediction_error_is_computed()
+    print("All tests passed.")
+
+
+def quick_smoke_test_prediction_error(runs: int = 5) -> None:
+    runtime = MasterAgentRuntime(memory_path="route_memory_smoke.json")
+    prompt = (
+        "Design a self-improving master agent scaffold with typed state, "
+        "predictive routing, online planner calibration via prediction error, "
+        "and adaptive policy learning"
+    )
+
+    print("\n" + "=" * 65)
+    print("     PREDICTION ERROR LEARNING SMOKE TEST – 5 identical runs")
+    print("=" * 65)
+
+    errors: List[float] = []
+    qualities: List[float] = []
+    route_lengths: List[int] = []
+    policies: List[str] = []
+
+    for i in range(1, runs + 1):
+        state = runtime.run(prompt, session_id=f"smoke_{i}")
+        feedback = state.agent_outputs.get("feedback_aggregator_node", {})
+        err = float(feedback.get("prediction_error", 0.0))
+        qual = state.evaluation.overall_quality
+        rlen = len(state.route.selected_path)
+        policy = state.master_control.policy_mode.value
+
+        errors.append(err)
+        qualities.append(qual)
+        route_lengths.append(rlen)
+        policies.append(policy)
+
+        print(
+            f"Run {i:2d} | error = {err:+8.4f} | quality = {qual:.3f} | "
+            f"route len = {rlen:2d} | policy = {policy:16}"
+        )
+
+    print("\nTrends:")
+    print("  Error:     " + " → ".join(f"{e:+.4f}" for e in errors))
+    print("  Quality:   " + " → ".join(f"{q:.3f}" for q in qualities))
+    print("  Route len: " + " → ".join(str(l) for l in route_lengths))
+    print("  Policy:    " + " → ".join(policies))
+    print(f"  Mean |error|: {sum(abs(e) for e in errors) / len(errors):.4f}")
+
+
+# ============================================================
+# CLI / demo
+# ============================================================
+
+
+if __name__ == "__main__":
+    runtime = MasterAgentRuntime(memory_path="route_memory_v3.json")
+
+    prompt = (
+        "Turn Divine Whisper into a single production-style Python scaffold for "
+        "Master-Agent Training Runtime v1, with typed state, node stubs, scoring "
+        "functions, route memory, online planner calibration, historical regret, "
+        "persistence, adaptive policy, and strong evaluation."
+    )
+
+    print("Running main demo...\n")
+    state = runtime.run(prompt, session_id="v3_demo")
+
+    print("\n" + "=" * 70)
+    print("                  FINAL OUTPUT – v3 IMPROVED VERSION")
+    print("=" * 70)
+    print(state.final_output.answer or "[No final answer generated]")
+
+    print(f"\nConfidence : {state.final_output.confidence:.3f}")
+    print(f"Quality    : {state.evaluation.overall_quality:.3f}  |  Passed: {state.evaluation.passed}")
+    print(f"Policy mode: {state.master_control.policy_mode.value}")
+    print(
+        f"Pred. error: "
+        f"{state.agent_outputs.get('feedback_aggregator_node', {}).get('prediction_error', 0.0):+.4f}"
+    )
+
+    print("\nExecuted route:")
+    for i, node in enumerate(state.route.selected_path, 1):
+        print(f"  {i:2d}. {node}")
+
+    print("\n=== BENCHMARK SAMPLE ===")
+    print(json.dumps(benchmark_runtime(runtime), indent=2))
+
+    print("\n=== TESTS ===")
+    run_tests()
+
+    print("\n" + "-" * 70)
+    print("Running enhanced smoke test (5 identical runs)...")
+    quick_smoke_test_prediction_error(runs=5)
+
+    print("\nDone. Memory saved to route_memory_v3.json")
