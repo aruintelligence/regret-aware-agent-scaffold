@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -65,6 +66,30 @@ class ScaffoldRegressionTests(unittest.TestCase):
         self.assertGreater(predict_route_quality(state, route, runtime.memory), baseline)
         runtime.memory.planner_history[signature] = [record(0.05, 0)]
         self.assertLess(predict_route_quality(state, route, runtime.memory), baseline)
+
+    def test_legacy_record_without_depth_is_not_used_for_calibration(self):
+        runtime = MasterAgentRuntime()
+        state = runtime.new_state(PROMPT)
+        state.task_type = TaskType.DESIGN
+        route = ["systems_design_node", "coherence_node", "compression_node"]
+        signature = task_signature_from_state(state)
+        baseline = predict_route_quality(state, route)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.json"
+            memory = RouteMemory()
+            memory.remember_planner(PlannerRecord(
+                task_signature=signature, selected_route=route,
+                predicted_quality=baseline, predicted_cost=0.09,
+                predicted_score=baseline - 0.09, actual_quality=0.0,
+                prediction_error=-baseline,
+            ))
+            memory.save_json(str(path))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            del payload["planner_history"][signature][0]["loop_count"]
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            loaded = RouteMemory.load_json(str(path))
+        self.assertEqual(loaded.planner_history[signature][0].loop_count, -1)
+        self.assertAlmostEqual(predict_route_quality(state, route, loaded), baseline)
 
     def test_reported_confidence_never_exceeds_internal_quality(self):
         state = MasterAgentRuntime().run(PROMPT)
