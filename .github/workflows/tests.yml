@@ -1,0 +1,14 @@
+name: Python regression tests
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run stdlib tests and benchmark
+        run: |
+          python3 -m unittest discover -s tests -v
+          python3 benchmark.py --runs 5 > /tmp/scaffold-benchmark.json
+          python3 -m json.tool /tmp/scaffold-benchmark.json > /dev/null

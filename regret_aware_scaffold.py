@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import time
@@ -225,6 +226,9 @@ class PlannerRecord:
     prediction_error: float
     historical_regret: float = 0.0
     timestamp: float = field(default_factory=time.time)
+    # Records written before retry depth was captured are kept for inspection,
+    # but excluded from depth-matched calibration.
+    loop_count: int = -1
 
 
 @dataclass
@@ -355,19 +359,19 @@ class RouteMemory:
         vals = self.edge_utilities.get(edge_key, [])
         return sum(vals) / len(vals) if vals else 0.0
 
-    def avg_planner_error_for_route(self, task_signature: str, route: List[str]) -> float:
+    def avg_planner_error_for_route(self, task_signature: str, route: List[str], loop_count: int = 0) -> float:
         vals = [
             rec.prediction_error
             for rec in self.planner_history.get(task_signature, [])
-            if rec.selected_route == route
+            if rec.selected_route == route and rec.loop_count == loop_count
         ]
         return sum(vals) / len(vals) if vals else 0.0
 
-    def avg_historical_regret_for_route(self, task_signature: str, route: List[str]) -> float:
+    def avg_historical_regret_for_route(self, task_signature: str, route: List[str], loop_count: int = 0) -> float:
         vals = [
             rec.historical_regret
             for rec in self.planner_history.get(task_signature, [])
-            if rec.selected_route == route
+            if rec.selected_route == route and rec.loop_count == loop_count
         ]
         return sum(vals) / len(vals) if vals else 0.0
 
@@ -443,6 +447,13 @@ def dedupe_routes(routes: List[List[str]]) -> List[List[str]]:
             seen.add(key)
             result.append(route)
     return result
+
+
+SPECIALIST_NODES = frozenset({
+    "research_node", "systems_design_node", "simulation_modeling_node",
+    "meaning_synthesis_node", "symbolic_spiritual_node", "truth_evidence_node",
+    "coherence_node", "conflict_resolver_node", "compression_node",
+})
 
 
 def generate_candidate_routes(state: DWState) -> List[List[str]]:
@@ -530,33 +541,20 @@ def predict_route_quality(state: DWState, route: List[str], memory: Optional[Rou
     if memory is not None:
         task_signature = task_signature_from_state(state)
 
-        errors = [
-            rec.prediction_error
+        observations = [
+            rec.actual_quality
             for rec in memory.planner_history.get(task_signature, [])
-            if rec.selected_route == route
+            if rec.selected_route == route and rec.loop_count == state.route.loop_count
         ]
-        if errors:
-            avg_error = sum(errors) / len(errors)
-            n = len(errors)
-            reg = 0.22 / (1 + 1.2 * n)
-
-            if avg_error > 0.02:
-                penalty = avg_error * (0.68 + reg)
-            elif avg_error < -0.02:
-                penalty = -avg_error * (0.30 + reg * 0.6)
-            else:
-                penalty = 0.0
-
-            score -= min(abs(penalty), 0.24)
-
-        regrets = [
-            rec.historical_regret
-            for rec in memory.planner_history.get(task_signature, [])
-            if rec.selected_route == route
-        ]
-        if regrets:
-            avg_regret = sum(regrets) / len(regrets)
-            score -= min(avg_regret * 0.18, 0.08)
+        if observations:
+            # Compare the same route at the same retry depth. Move the score
+            # toward observed internal quality, in either direction, while
+            # retaining a prior when observations are scarce.
+            weight = len(observations) / (len(observations) + 4)
+            observed_quality = sum(observations) / len(observations)
+            score = (1 - weight) * score + weight * (
+                observed_quality + predict_route_cost(route)
+            )
 
     return clamp(score)
 
@@ -626,7 +624,7 @@ def score_route_efficiency(state: DWState) -> float:
         return 0.0
 
     avg_score = sum(flat_scores) / len(flat_scores)
-    length_penalty = min(len(state.route.selected_path) / 20.0, 0.25)
+    length_penalty = min(len(state.route.planned_path) / 20.0, 0.25)
     loop_penalty = min(state.route.loop_count * 0.08, 0.24)
     return clamp(avg_score - length_penalty - loop_penalty)
 
@@ -768,23 +766,31 @@ class PromptIntakeNode(BaseNode):
             goal_alignment_delta=0.12,
             completion_readiness_delta=0.04,
         )
-        recs = Recommendations(next_nodes=["context_reconstruction_node"], reason="Task structure extracted")
+        recs = Recommendations(next_nodes=["signal_detection_node"], reason="Task structure extracted")
         return outputs, delta, recs, 0.93, 0.10
 
 
 class ContextReconstructionNode(BaseNode):
     name = "context_reconstruction_node"
     node_type = NodeType.INTAKE
-    required_outputs = ("prompt_intake_node",)
+    required_outputs = ("signal_detection_node",)
 
     def __init__(self, memory: RouteMemory):
         self.memory = memory
 
     def process(self, state: DWState):
         signature = task_signature_from_state(state)
-        best_paths = self.memory.best_paths_for_signature(signature)
+        best_paths = self.memory.best_paths_for_signature(
+            signature, top_k=len(self.memory.route_history.get(signature, []))
+        )
+        comparable_paths = [
+            r.path for r in best_paths
+            if r.path and all(name in SPECIALIST_NODES for name in r.path)
+        ][:3]
         hints = {
-            "best_known_paths": [r.path for r in best_paths],
+            # Older records may contain the entire execution loop. Only a
+            # specialist route can be compared with a planner candidate.
+            "best_known_paths": comparable_paths,
             "prior_avg_systems_design": self.memory.avg_node_utility("systems_design_node"),
             "prior_avg_coherence": self.memory.avg_node_utility("coherence_node"),
         }
@@ -802,14 +808,14 @@ class ContextReconstructionNode(BaseNode):
             "route_hints": hints,
         }
         delta = StateDelta(coherence_delta=0.05, clarity_delta=0.04)
-        recs = Recommendations(next_nodes=["signal_detection_node"], reason="Prior route memory injected")
+        recs = Recommendations(next_nodes=["distortion_detection_node"], reason="Prior route memory injected")
         return outputs, delta, recs, 0.87, 0.08
 
 
 class SignalDetectionNode(BaseNode):
     name = "signal_detection_node"
     node_type = NodeType.ANALYSIS
-    required_outputs = ("prompt_intake_node", "context_reconstruction_node")
+    required_outputs = ("prompt_intake_node",)
 
     def process(self, state: DWState):
         text = state.user_input
@@ -842,7 +848,7 @@ class SignalDetectionNode(BaseNode):
         )
         outputs = asdict(state.signals)
         delta = StateDelta(clarity_delta=0.14, goal_alignment_delta=0.10, distortion_delta=-0.03)
-        recs = Recommendations(next_nodes=["distortion_detection_node"], reason="Primary and systemic signals extracted")
+        recs = Recommendations(next_nodes=["context_reconstruction_node"], reason="Primary and systemic signals extracted")
         return outputs, delta, recs, 0.95, 0.09
 
 
@@ -904,8 +910,8 @@ class PlannerNode(BaseNode):
             predicted_score = clamp(predicted_quality - predicted_cost)
 
             task_signature = task_signature_from_state(state)
-            avg_error = self.memory.avg_planner_error_for_route(task_signature, route)
-            avg_regret = self.memory.avg_historical_regret_for_route(task_signature, route)
+            avg_error = self.memory.avg_planner_error_for_route(task_signature, route, state.route.loop_count)
+            avg_regret = self.memory.avg_historical_regret_for_route(task_signature, route, state.route.loop_count)
 
             scored_routes.append(
                 {
@@ -1194,9 +1200,8 @@ class FormatterNode(BaseNode):
 
     def process(self, state: DWState):
         answer = (
-            "Divine Whisper Master-Agent Training Runtime v7 scaffold assembled with typed state, node contracts, "
-            "PlannerNode route search, prediction-error learning, historical regret tracking, per-loop learning, "
-            "persistence hooks, and adaptive policy updates."
+            "Simulated specialist route: " + " → ".join(state.route.planned_path) + ". "
+            "This scaffold does not execute external tools or verify task completion."
         )
         confidence = clamp((state.metrics.clarity + state.metrics.coherence + state.metrics.goal_alignment) / 3.0)
         state.final_output = FinalOutputState(answer=answer, confidence=confidence)
@@ -1213,7 +1218,9 @@ class EvaluatorNode(BaseNode):
     def process(self, state: DWState):
         quality = score_run_quality(
             state.metrics,
-            path_length=len(state.route.selected_path),
+            # Control, evaluation, and previous loops are not candidate route
+            # costs. A separate loop penalty already accounts for retries.
+            path_length=len(state.route.planned_path),
             loop_count=state.route.loop_count,
         )
         failure_modes = []
@@ -1242,6 +1249,9 @@ class EvaluatorNode(BaseNode):
             rerun_recommended=rerun,
             overall_quality=quality,
         )
+        # The formatter runs before evaluation. Never leave its optimistic
+        # pre-evaluation estimate displayed as confidence after a failed gate.
+        state.final_output.confidence = min(state.final_output.confidence, quality)
         outputs = asdict(state.evaluation)
         delta = StateDelta()
         recs = Recommendations(next_nodes=["feedback_aggregator_node"], reroute=rerun, reason="Run evaluated")
@@ -1404,12 +1414,7 @@ class MemoryUpdateNode(BaseNode):
         signature = task_signature_from_state(state)
         loop_id = state.route.loop_count
 
-        if state.evaluation.passed and state.route.successful_path:
-            stored_path = list(state.route.successful_path)
-        elif state.route.loop_paths:
-            stored_path = list(state.route.loop_paths[-1])
-        else:
-            stored_path = list(state.route.selected_path)
+        stored_path = list(state.route.planned_path)
 
         self.memory.remember_route(
             RouteRecord(
@@ -1431,11 +1436,16 @@ class MemoryUpdateNode(BaseNode):
         prediction_error = actual_quality - predicted_score
 
         historical_regret = 0.0
-        if self.memory.planner_history.get(signature):
+        previous_at_depth = [
+            r for r in self.memory.planner_history.get(signature, [])
+            if r.loop_count == loop_id
+        ]
+        if previous_at_depth:
             best_hist = max(
-                (r.actual_quality for r in self.memory.planner_history[signature]),
+                (r.actual_quality for r in previous_at_depth),
                 default=actual_quality,
             )
+            # Descriptive gap to a past run; it is not counterfactual regret.
             historical_regret = max(0.0, best_hist - actual_quality)
 
         self.memory.remember_planner(
@@ -1449,6 +1459,7 @@ class MemoryUpdateNode(BaseNode):
                 prediction_error=prediction_error,
                 historical_regret=historical_regret,
                 timestamp=time.time(),
+                loop_count=loop_id,
             )
         )
 
@@ -1588,8 +1599,8 @@ class MasterAgentRuntime:
 
         for node_name in [
             "prompt_intake_node",
-            "context_reconstruction_node",
             "signal_detection_node",
+            "context_reconstruction_node",
             "distortion_detection_node",
         ]:
             state.task_phase = TaskPhase.ANALYSIS if "detection" in node_name else TaskPhase.INTAKE
@@ -1723,8 +1734,8 @@ def _test_planner_generates_routes() -> None:
     state = runtime.new_state("Design a Python scaffold with evaluation and route memory.")
     for node_name in [
         "prompt_intake_node",
-        "context_reconstruction_node",
         "signal_detection_node",
+        "context_reconstruction_node",
         "distortion_detection_node",
         "orchestrator_node",
         "planner_node",
@@ -1771,7 +1782,7 @@ def quick_smoke_test_prediction_error(runs: int = 5) -> None:
     )
 
     print("\n" + "=" * 65)
-    print("     PREDICTION ERROR LEARNING SMOKE TEST – 5 identical runs")
+    print("     INTERNAL CALIBRATION SMOKE TEST – identical runs")
     print("=" * 65)
 
     errors: List[float] = []
@@ -1803,6 +1814,7 @@ def quick_smoke_test_prediction_error(runs: int = 5) -> None:
     print("  Route len: " + " → ".join(str(l) for l in route_lengths))
     print("  Policy:    " + " → ".join(policies))
     print(f"  Mean |error|: {sum(abs(e) for e in errors) / len(errors):.4f}")
+    print("These are internal proxy scores; monotonic improvement is not guaranteed.")
 
 
 # ============================================================
@@ -1810,44 +1822,47 @@ def quick_smoke_test_prediction_error(runs: int = 5) -> None:
 # ============================================================
 
 
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Inspect the simulated regret-aware route planner")
+    parser.add_argument(
+        "--prompt",
+        default="Design a Python master agent scaffold with route memory and evaluation.",
+    )
+    parser.add_argument("--runs", type=int, default=1, help="Repeat the same prompt in one runtime")
+    parser.add_argument("--memory-file", help="Optional JSON path to retain route observations between invocations")
+    parser.add_argument("--json", action="store_true", help="Emit concise machine-readable run records")
+    args = parser.parse_args()
+    if args.runs < 1:
+        parser.error("--runs must be at least 1")
+
+    runtime = MasterAgentRuntime(memory_path=args.memory_file)
+    records = []
+    for index in range(1, args.runs + 1):
+        state = runtime.run(args.prompt, session_id=f"cli_{index}")
+        feedback = state.agent_outputs.get("feedback_aggregator_node", {})
+        records.append({
+            "run": index,
+            "task_signature": task_signature_from_state(state),
+            "selected_route": state.route.planned_path,
+            "executed_nodes": len(state.route.selected_path),
+            "reroutes": state.route.loop_count,
+            "internal_quality": round(state.evaluation.overall_quality, 6),
+            "internal_gate_passed": state.evaluation.passed,
+            "prediction_error": round(feedback.get("prediction_error", 0.0), 6),
+            "prior_route_hints": len(state.memory_hints.get("best_known_paths", [])),
+        })
+    if args.json:
+        print(json.dumps(records, indent=2))
+    else:
+        print("Simulated outcomes (internal proxy scores; no external task validation)")
+        for row in records:
+            print(
+                f"Run {row['run']}: quality={row['internal_quality']:.3f} "
+                f"gate={row['internal_gate_passed']} nodes={row['executed_nodes']} "
+                f"reroutes={row['reroutes']} hints={row['prior_route_hints']} "
+                f"error={row['prediction_error']:+.3f}"
+            )
+
+
 if __name__ == "__main__":
-    runtime = MasterAgentRuntime(memory_path="route_memory_v3.json")
-
-    prompt = (
-        "Turn Divine Whisper into a single production-style Python scaffold for "
-        "Master-Agent Training Runtime v1, with typed state, node stubs, scoring "
-        "functions, route memory, online planner calibration, historical regret, "
-        "persistence, adaptive policy, and strong evaluation."
-    )
-
-    print("Running main demo...\n")
-    state = runtime.run(prompt, session_id="v3_demo")
-
-    print("\n" + "=" * 70)
-    print("                  FINAL OUTPUT – v3 IMPROVED VERSION")
-    print("=" * 70)
-    print(state.final_output.answer or "[No final answer generated]")
-
-    print(f"\nConfidence : {state.final_output.confidence:.3f}")
-    print(f"Quality    : {state.evaluation.overall_quality:.3f}  |  Passed: {state.evaluation.passed}")
-    print(f"Policy mode: {state.master_control.policy_mode.value}")
-    print(
-        f"Pred. error: "
-        f"{state.agent_outputs.get('feedback_aggregator_node', {}).get('prediction_error', 0.0):+.4f}"
-    )
-
-    print("\nExecuted route:")
-    for i, node in enumerate(state.route.selected_path, 1):
-        print(f"  {i:2d}. {node}")
-
-    print("\n=== BENCHMARK SAMPLE ===")
-    print(json.dumps(benchmark_runtime(runtime), indent=2))
-
-    print("\n=== TESTS ===")
-    run_tests()
-
-    print("\n" + "-" * 70)
-    print("Running enhanced smoke test (5 identical runs)...")
-    quick_smoke_test_prediction_error(runs=5)
-
-    print("\nDone. Memory saved to route_memory_v3.json")
+    main()
