@@ -58,4 +58,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs", type=int, default=5)
     args = parser.parse_args()
-    parser.exit(0, json.dumps(compare(args.runs), indent=2) + "\n")
+    print(json.dumps(compare(args.runs), indent=2))
