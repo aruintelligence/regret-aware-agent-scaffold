@@ -1,54 +1,60 @@
-## Project Vision – What Divine Whisper Actually Is
-
-Divine Whisper is a multi-agent cognitive architecture designed to orchestrate specialized AI agents through a graph-based reasoning system. Instead of being a single AI model like GPT, Claude, or Grok, it functions more like an intelligence operating system that coordinates many models and reasoning modules.
-
-**Core capabilities**  
-• Multi-agent reasoning and debate (council-style cognition)  
-• Orchestrated AI model routing (AI managing other AIs)  
-• Persistent memory and learning from past reasoning paths  
-• Phase-aware cognition detecting confusion, focus, and breakthrough  
-• Feedback loops that improve system decision policies over time  
-• Simulation of human-like cognition and clarity dynamics
-
-**Potential applications**  
-• Advanced research and scientific discovery systems  
-• Autonomous AI orchestration across multiple models  
-• Complex engineering and architecture design platforms  
-• Strategic decision analysis for organizations  
-• Cognitive science and neuroscience modeling  
-• Self-improving AI reasoning engines
-
-**Ultimate vision**  
-A distributed intelligence system that can coordinate multiple reasoning agents, learn from its own cognitive processes, and continually improve how complex problems are solved.
-
-Co-authored by Daniel Jacob Read IV & Shane Travis Horman (ĀRU Intelligence).
 # Regret-Aware Agent Scaffold
-## Relation to Inward Physics
 
-This scaffold is a minimal working prototype of several recurring themes in Inward Physics:
+A dependency-free Python **routing simulator** for studying how an agent controller can remember prior routes and calibrate predictions after each attempt. Created by Daniel Jacob Read IV and Shane Travis Horman (ĀRU Intelligence).
 
-- Self-reference via execution trace observation  
-- Regret as a directional force in possibility space  
-- Inward calibration over outward expansion  
-- Coherence & compression as attractors  
-- Typed state as emergent ontology
+This is a scaffold with scripted specialist nodes. It does not call an LLM, browse, solve arbitrary prompts, measure cognition, or validate real-world task success. Its “quality” and “confidence” are internal proxy values defined by the code.
 
-The smoke test shows the system literally turning inward: measuring its own prediction failures, feeling historical regret, and rewiring itself to become more coherent over time.
-Self-improving Python agent orchestrator with:
-- Typed state (`DWState`)
-- Dynamic route planning through specialist nodes
-- Predictive route quality scoring
-- Online calibration using prediction error + historical regret
-- Persistent memory across runs (`RouteMemory`)
-- Adaptive policy updates from master-agent feedback
+## Run it
 
-## Features
-- Planner predicts route quality before execution
-- Measures actual quality after run
-- Penalizes overconfident predictions asymmetrically
-- Uses regret (how much better a known route was) to avoid bad paths
-- Learns visibly in smoke test (error shrinks, quality rises, routes shorten)
+Requires Python 3.9 or newer; no package installation is needed.
 
-## Quick Start
 ```bash
-python regret_aware_scaffold.py
+python3 regret_aware_scaffold.py --runs 5
+python3 regret_aware_scaffold.py --prompt "Research a route evaluation method" --runs 3 --json
+python3 regret_aware_scaffold.py --runs 5 --memory-file route_memory.json
+python3 -m unittest discover -s tests -v
+python3 benchmark.py --runs 5
+```
+
+The optional memory file stores route observations as local JSON. Without it, memory lasts for the current process only. The benchmark deliberately uses fresh in-memory runtimes so its results are independent of saved files.
+
+## How the loop works
+
+```mermaid
+flowchart TD
+    A["Prompt"] --> B["Classify and form signature"]
+    B --> C["Predict and select route"]
+    C --> D["Run scripted nodes"]
+    D --> E["Score internal outcome"]
+    E --> F["Store route and calibration record"]
+    F -->|"Retry or next run"| C
+```
+
+Route memory stores only the selected specialist route. Calibration compares past outcomes for the same task signature, route, and retry depth. Sparse observations are blended with the initial heuristic instead of replacing it outright. A `historical_regret` record describes the gap to a previous observed score at that depth; it is **not** a counterfactual estimate of an untried route.
+
+## Reproducible internal comparison
+
+`benchmark.py` runs each prompt five times in two arms: **cold** creates a new runtime for every attempt; **warm** reuses the same runtime for that prompt. The table compares rounds 2–5. These are deterministic examples with fixed scripted nodes, not independent task labels.
+
+| Prompt | Mean executed nodes, cold → warm | Mean absolute prediction error, cold → warm | Mean internal quality, cold → warm |
+|---|---:|---:|---:|
+| Design | 26 → 26 | 0.186 → 0.073 | 0.666 → 0.666 |
+| Research | 26 → 26 | 0.236 → 0.114 | 0.646 → 0.646 |
+| Mixed | 37 → 26 | 0.267 → 0.084 | 0.667 → 0.658 |
+
+The warm controller predicts its own proxy score more closely on these fixtures and uses one fewer retry on the mixed fixture. Its internal quality score is slightly **lower** on that fixture. This is evidence of a software behavior change, not evidence that it gives better answers or has become more intelligent. Run the command above to inspect all individual records and challenge these results.
+
+## What this repair addresses
+
+- Task signatures are now formed after the signal is available, so saved observations can be retrieved on a later run.
+- Stored routes are comparable to planner candidates; old full execution traces are excluded from route hints.
+- The quality function charges the selected specialist route and a separate retry penalty rather than charging every control and evaluation node repeatedly.
+- Calibration can move predictions up or down using outcomes at the same retry depth.
+- Displayed confidence is capped by the internal score after evaluation; a failed gate cannot still report a perfect score.
+- A small CLI, regression tests, and a cold/warm comparison replace the previous demo's unverified improvement claims.
+
+## Research boundary
+
+The evaluator and specialists are hand-authored. No ground-truth outcome or held-out real task is available here. Better calibration to this evaluator can coexist with worse real-world performance. A stronger next experiment would define externally graded tasks and compare this planner against a fixed policy with matched prompts, budgets, and independently specified success criteria.
+
+MIT licensed; see [LICENSE](LICENSE). Project concepts relate to the [Divine Whisper lineage](https://github.com/aruintelligence/divine-whisper-ecosystem) and Inward Physics™ research.
