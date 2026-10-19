@@ -40,6 +40,7 @@ jobs:
           aru-squad --help > /dev/null
           aru-llm-squad --help > /dev/null
           aru-power --help > /dev/null
+          aru-anytime --help > /dev/null
       - name: Verify prospective pilot sample-size planner
         run: |
           aru-power --uplift 0.05 --discordance 0.25 --cluster-size 20 --icc 0.05 --missing 0.1 --grade-cost 1.5 --execution-cost 0.5 > /tmp/aru-pilot-plan.json
@@ -50,6 +51,25 @@ jobs:
           assert report["cluster_design_effect"] > 1
           assert report["estimated_task_execution_and_grading_cost"] > 0
           print("Prospective pilot plan:", report["requested_tasks_rounded_to_clusters"], "tasks")
+          PY
+      - name: Verify prospective anytime-evidence e-process (synthetic only)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          Path("/tmp/aru-pairs.jsonl").write_text("".join(
+              json.dumps({"baseline": 0, "candidate": 1}) + "\n"
+              for _ in range(40)
+          ))
+          PY
+          aru-anytime --pairs-jsonl /tmp/aru-pairs.jsonl --acknowledge-design-assumptions > /tmp/aru-anytime.json
+          python - <<'PY'
+          import json
+          result = json.load(open("/tmp/aru-anytime.json"))
+          assert result["ever_crossed_threshold"]
+          assert not result["automatic_rollout_permitted"]
+          assert result["n_pairs"] == 40
+          print("Synthetic anytime-evidence test passed; no real-world claims")
           PY
       - name: Verify original scaffold benchmark
         run: python benchmark.py --runs 3 > /dev/null
