@@ -32,6 +32,14 @@ A genuine open-weight 135M-parameter model has now completed a public human-gold
 
 The new source-grounding gate is being evaluated on a further disjoint public question subset. Its success criteria are correct certificate verification and honest reporting of coverage, rejection, and F1 tradeoffs, not higher model intelligence. Before selling it for enterprise knowledge management, add trusted-source controls, citation relevance and entailment checks, privacy safeguards, prompt-injection defenses, and independent customer tests.
 
+## ĀRU consent-scoped source memory (new research component)
+
+The [Sovereign Source Registry](SOVEREIGN_SOURCE_REGISTRY.md) extends source provenance with a narrow **permission-at-use** check: an exact source is authorized for a specific opaque owner and purpose until its grant expires or is revoked. A keyed ledger stores no raw source text. An optional independently keyed external checkpoint can detect rollback of previously anchored revocations, and the local QA server can deny inference when that checkpoint fails.
+
+This is a stronger *research control* than a generic consent banner, but it is **not** verified legal consent, real user authentication, enterprise access control, encrypted data storage, or complete protection against deletion of unanchored revocations. Production commercialization would require customer-controlled identity, consent evidence, independently retained audit anchors, encryption, privacy and deletion policy, and a security assessment.
+
+**Potential buyer use case:** internal knowledge assistants whose source documents have explicit owner, purpose, expiry and revocation rules. The measurable pilot outcome should be the rate of unauthorized-source requests blocked before inference, the latency overhead, the false-denial rate on valid grants, and independently reviewed privacy controls—not claims of human-like memory or perfect data sovereignty.
+
 ## Target buyer and wedge
 
 Initial buyer hypothesis: head of AI platform, engineering director for agentic workflows, or an enterprise AI assurance lead at an organization deploying multiple AI agents.
