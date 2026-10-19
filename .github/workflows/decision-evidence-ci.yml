@@ -90,6 +90,7 @@ jobs:
           mkdir -p benchmark-data
           curl --fail --location --show-error --silent --retry 3 --max-time 120 https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json --output benchmark-data/dev-v1.1.json
           sha256sum benchmark-data/dev-v1.1.json
+          echo "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9  benchmark-data/dev-v1.1.json" | sha256sum --check
           test "$(wc -c < benchmark-data/dev-v1.1.json)" -gt 1000000
       - name: Run external gold-label experiment
         run: |
