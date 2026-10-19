@@ -100,6 +100,10 @@ This supports repeated monitoring *only when the conditional null, prospective i
 
 **Falsification:** deterministic tests check ties (`M=1`), losses (wealth falls), all wins (wealth grows and crosses), exact single-bet products, invalid data rejection and long-stream numerical stability. `sequential_validation.py` also runs seeded Monte Carlo trials under a known fair conditional null (baseline-only and candidate-only probability 0.20 each) and a known positive alternative (0.10 and 0.30). It reports empirical ever-crossing frequency and alternative detection, clearly labeled as synthetic evidence. The theorem, not finite Monte Carlo, supplies the mathematical guarantee under its assumptions.
 
+### Reproducible synthetic sequential sanity check
+
+The pinned CI run [39197809292](https://github.com/aruintelligence/regret-aware-agent-scaffold/actions/runs/39197809292) executed **200 independent simulated streams of 150 tasks each per condition** using seed `20261018` and `alpha=0.05`. The empirical ever-crossing frequency was **3.0%** under the specified fair conditional null and **91.5%** under the specified positive alternative. These are finite, seeded **synthetic** checks—not proof of real-world performance, nor a substitute for the supermartingale argument.
+
 ## 6. Prospective pilot power and budget
 
 For a paired binary difference `D in {-1,0,+1}`, assume an expected uplift `delta=E[D]>0` and discordance rate `q=E[D^2]`. Then `Var[D]=q-delta^2`. A simple normal-approximation sample size is
