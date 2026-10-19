@@ -25,6 +25,18 @@ Each interval used 400 seeded bootstrap replicates. These are exploratory percen
 
 **Domain-level caution:** the full-information audit found **one article with a material negative challenger result** under the preregistered-in-code screen (at least 20 examples and more than 5 percentage points worse). The affected article is **Victoria_(Australia)** (25 questions): baseline **72%**, challenger **64%**, a decline of **8 percentage points**. The system blocks advancement to the human-review screen until that regression is investigated. An aggregate win is not universal superiority. This small subgroup difference is exploratory and may be noisy.
 
+### Adversarial topic-mix robustness
+
+The new **observed-domain total-variation stress test** reweights the same 48 measured article domains to make the challenger look as unfavorable as possible, while holding each article's observed accuracy difference fixed. It does **not** model unseen topics or changes within a topic.
+
+| Adversarial change in observed topic mix | Worst-case empirical challenger uplift |
+| --- | ---: |
+| 5% total-variation shift | **+2.51 percentage points** |
+| 10% shift | **+1.59 percentage points** |
+| 20% shift | **+0.013 percentage points** (nearly erased) |
+
+The computed **break-even topic-mix radius** is approximately **20.09%**: at that adversarial reweighting budget, the observed aggregate gain can be eliminated. This is a descriptive fragility threshold under a constrained reweighting model, **not** a confidence interval, causal proof, or guarantee about real future customers.
+
 ### Off-policy estimator check
 
 Only the randomized selected route's outcome was supplied to the off-policy estimator; both routes were executed offline solely to establish the directly observable audit benchmark.
