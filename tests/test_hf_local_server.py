@@ -15,12 +15,13 @@ class FakeEngine:
 
     def __init__(self):
         self.calls = []
+        self.answer = "Oregon"
 
     def generate(self, messages, *, max_tokens=96):
         self.calls.append((messages, max_tokens))
         return {
             "choices": [{"index": 0, "message": {
-                "role": "assistant", "content": "Oregon",
+                "role": "assistant", "content": self.answer,
             }}],
             "model": self.model_id,
             "usage": {"prompt_tokens": 20, "completion_tokens": 2},
@@ -40,11 +41,14 @@ class HFLocalServerTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=5)
 
-    def _post(self, payload):
+    def _post(self, payload, *, path="/v1/chat/completions", consent=False):
+        headers = {"Content-Type": "application/json"}
+        if consent:
+            headers["X-ARU-Consent"] = "research-opt-in"
         req = urllib.request.Request(
-            self.base + "/v1/chat/completions",
+            self.base + path,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         try:
@@ -78,6 +82,54 @@ class HFLocalServerTests(unittest.TestCase):
         self.assertEqual(self._post({**base, "model": "other"})[0], 422)
         self.assertEqual(self._post({**base, "stream": True})[0], 422)
         self.assertEqual(self._post({**base, "temperature": 0.5})[0], 422)
+        self.assertEqual(len(self.engine.calls), 0)
+
+    def test_grounded_answer_api_requires_consent_and_proves_source_span(self):
+        payload = {
+            "model": self.engine.model_id,
+            "context": "The observatory was in Oregon.",
+            "question": "Where was the observatory?",
+            "max_tokens": 48,
+        }
+        path = "/v1/grounded/answers"
+        status, _ = self._post(payload, path=path)
+        self.assertEqual(status, 403)
+        self.assertEqual(len(self.engine.calls), 0)
+        status, body = self._post(payload, path=path, consent=True)
+        self.assertEqual(status, 200)
+        self.assertTrue(body["accepted"])
+        self.assertEqual(body["answer"], "Oregon")
+        self.assertEqual(body["proof"]["model_revision"], self.engine.revision)
+        from grounding_contract import verify_grounding
+        self.assertTrue(verify_grounding(body["proof"], payload["context"]))
+        self.assertFalse(body["automatic_rollout_permitted"])
+        self.assertNotIn(payload["context"], json.dumps(body))
+
+    def test_grounded_answer_api_abstains_on_unsupported_model_claim(self):
+        self.engine.answer = "Washington"
+        status, body = self._post({
+            "model": self.engine.model_id,
+            "context": "The observatory was in Oregon.",
+            "question": "Where was the observatory?",
+        }, path="/v1/grounded/answers", consent=True)
+        self.assertEqual(status, 200)
+        self.assertFalse(body["accepted"])
+        self.assertEqual(body["answer"], "")
+        self.assertEqual(body["proof"]["reason"], "model_answer_not_found_as_source_span")
+
+    def test_grounded_api_rejects_unknown_fields_and_oversized_question(self):
+        payload = {
+            "model": self.engine.model_id,
+            "context": "Oregon",
+            "question": "Where?",
+            "raw_private_data": "secret",
+        }
+        status, _ = self._post(payload, path="/v1/grounded/answers", consent=True)
+        self.assertEqual(status, 422)
+        payload.pop("raw_private_data")
+        payload["question"] = "A" * 2001
+        status, _ = self._post(payload, path="/v1/grounded/answers", consent=True)
+        self.assertEqual(status, 422)
         self.assertEqual(len(self.engine.calls), 0)
 
     def test_rejects_external_bind(self):
