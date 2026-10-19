@@ -18,7 +18,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from evidence_dashboard import save_dashboard
-from distribution_robustness import topic_mix_stress_table
+from distribution_robustness import break_even_topic_shift, topic_mix_stress_table
 from evidence_lab import evaluate_experiment
 from route_experiments import action_id, append_jsonl, validate_decision
 from squad_sentence_retrieval import (
@@ -188,6 +188,7 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
         "paired_article_cluster_interval": cluster_oracle_interval(by_article, replicates=replicates, seed=seed + 3),
         "article_diagnostics": article_diagnostics,
         "topic_mix_stress": topic_mix_stress_table(article_diagnostics),
+        "break_even_topic_shift_tv": break_even_topic_shift(article_diagnostics),
         "negative_article_count": len(negative_articles),
         "audit_examples": examples,
         "scope": "human-annotated sentence retrieval, not LLM question answering",
