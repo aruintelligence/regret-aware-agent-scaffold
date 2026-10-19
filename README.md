@@ -496,3 +496,27 @@ This is a **local research endpoint, not an authenticated production service**. 
 ## Design partner commercial pilot package
 
 [DESIGN_PARTNER_PILOT.md](DESIGN_PARTNER_PILOT.md) contains a **nonbinding six-week, $20,000 proposed pilot** with scoped deliverables, independent grading, measurable acceptance criteria, human-governed rollout, privacy and IP gates, and illustrative—not validated—delivery economics. The fee is a sales hypothesis, not an established market price. The pilot should not begin until customer authorization, data classification, security review and appropriate agreements are complete.
+
+
+## Specialized real extractive QA with verified source offsets
+
+The completed third real-model experiment (public SQuAD questions 80–119) exposed a serious limitation of simple LLM output filtering. Only **2 of 40 direct-prompt outputs (5.0%)** and **1 of 40 grounded-prompt outputs (2.5%)** matched verifiable contiguous source spans. After strict abstention, **both arms had 0% token F1** on those 40 questions. These are genuine negative results from [successful CI run 39200572525](https://github.com/aruintelligence/regret-aware-agent-scaffold/actions/runs/39200572525), not a hidden result to be suppressed.
+
+ĀRU now tests a different architecture: a **real pretrained extractive question-answering model** that directly predicts source-token start and end positions. The `extractive_qa_engine.py` implementation uses fast-tokenizer source offsets, bounded sliding windows, no remote custom code, safetensors-only weights, and independent source hash/offset verification. This is a standard pretrained QA model integrated into ĀRU's evidence architecture—not a newly invented neural architecture.
+
+The **preregistered 80-question comparison** uses the next SHA-ordered public SQuAD questions (offset 120–199), evaluates the specialized model and the small generative LLM on identical passages/questions, and reports **coverage, exact match, token F1, latency, failures, matched F1 difference and article-cluster uncertainty**. See [EXTRACTIVE_QA_PROTOCOL.md](EXTRACTIVE_QA_PROTOCOL.md). The specialized model is fine-tuned for SQuAD-like tasks; any win is task-specific and not a fair general reasoning comparison.
+
+```bash
+# Optional heavyweight model dependencies, in an isolated virtual environment:
+python3 -m pip install '.[real-model]'
+
+# With the small LLM already running on loopback and official SQuAD dev JSON:
+aru-qa-proof --dataset dev-v1.1.json --out-dir real-qa-proof-report \
+  --qa-model distilbert/distilbert-base-cased-distilled-squad \
+  --llm-model HuggingFaceTB/SmolLM2-135M-Instruct \
+  --llm-endpoint http://127.0.0.1:1234/v1/chat/completions \
+  --limit 80 --offset 120 --seed 20261018 \
+  --acknowledge-model-calls
+```
+
+The new real-model CI job downloads the specialized model weights, records the immutable revision, executes the comparison, and uploads aggregate-only reports. **Source-backed does not mean factually correct.** Neither this experiment nor a high F1 score would establish safety, truthfulness, customer ROI, or enterprise readiness.
