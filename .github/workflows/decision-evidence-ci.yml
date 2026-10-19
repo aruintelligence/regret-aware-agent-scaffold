@@ -51,6 +51,8 @@ jobs:
           report = json.loads(Path("demo-report/report.json").read_text())
           assert report["n_logged"] == 500
           assert report["label_source_counts"]["synthetic"] == 500
+          assert report["anytime_ips_difference"]["n"] == 500
+          assert report["anytime_ips_difference"]["method"] == "conditional_hoeffding_ville_grid_v1"
           assert not report["review_gate"]["candidate_for_human_review"]
           assert not report["review_gate"]["automatic_rollout_permitted"]
           assert Path("demo-report/index.html").exists()

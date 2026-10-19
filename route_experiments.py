@@ -58,6 +58,41 @@ def append_jsonl(path: str, row: dict) -> None:
         handle.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
 
 
+def logging_action_probabilities(row: dict) -> Dict[str, float]:
+    """Return the logged distribution over every candidate action.
+
+    This checks the declared distribution, not whether an external controller
+    actually randomized according to it. Call validate_decision before using
+    these probabilities for statistical inference.
+    """
+    candidates = row.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        raise ValueError("candidate routes are required")
+    ids = [candidate.get("action") for candidate in candidates]
+    if any(not isinstance(action, str) or not action for action in ids) or len(set(ids)) != len(ids):
+        raise ValueError("candidate actions must be unique")
+    policy = row.get("logging_policy")
+    if policy == "epsilon_greedy":
+        if candidates[0]["predicted_score"] < max(candidate["predicted_score"] for candidate in candidates):
+            raise ValueError("epsilon-greedy candidate order must start with highest score")
+        epsilon = row.get("epsilon")
+        if not isinstance(epsilon, (int, float)) or isinstance(epsilon, bool) or not math.isfinite(epsilon) or not 0 < epsilon <= 1:
+            raise ValueError("epsilon must be in (0,1]")
+        return {action: epsilon / len(ids) + (1 - epsilon if index == 0 else 0)
+                for index, action in enumerate(ids)}
+    if policy == "categorical":
+        probabilities = row.get("candidate_probabilities")
+        if not isinstance(probabilities, list) or len(probabilities) != len(ids):
+            raise ValueError("categorical policy requires one probability per candidate")
+        if any(isinstance(p, bool) or not isinstance(p, (float, int)) or not math.isfinite(p) or p <= 0
+               for p in probabilities):
+            raise ValueError("categorical probabilities must be finite and positive")
+        if not math.isclose(math.fsum(probabilities), 1.0, rel_tol=1e-10, abs_tol=1e-10):
+            raise ValueError("categorical probabilities must sum to 1")
+        return dict(zip(ids, probabilities))
+    raise ValueError("unsupported logging policy")
+
+
 def validate_decision(row: dict) -> None:
     if row.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("unsupported decision schema")
@@ -83,28 +118,10 @@ def validate_decision(row: dict) -> None:
         raise ValueError("duplicate candidate routes")
     if row.get("action") not in ids:
         raise ValueError("selected action missing from candidates")
-    policy = row.get("logging_policy")
     propensity = row.get("propensity")
     if not isinstance(propensity, (int, float)) or isinstance(propensity, bool) or not math.isfinite(propensity) or not 0 < propensity <= 1:
         raise ValueError("propensity must be finite and in (0,1]")
-    if policy == "epsilon_greedy":
-        if candidates[0]["predicted_score"] < max(candidate["predicted_score"] for candidate in candidates):
-            raise ValueError("epsilon-greedy candidate order must start with highest score")
-        epsilon = row.get("epsilon")
-        if not isinstance(epsilon, (int, float)) or isinstance(epsilon, bool) or not math.isfinite(epsilon) or not 0 < epsilon <= 1:
-            raise ValueError("epsilon must be in (0,1]")
-        expected = epsilon / len(ids) + (1 - epsilon if row["action"] == ids[0] else 0)
-    elif policy == "categorical":
-        probabilities = row.get("candidate_probabilities")
-        if not isinstance(probabilities, list) or len(probabilities) != len(ids):
-            raise ValueError("categorical policy requires one probability per candidate")
-        if any(isinstance(p, bool) or not isinstance(p, (float, int)) or not math.isfinite(p) or p <= 0 for p in probabilities):
-            raise ValueError("categorical probabilities must be finite and positive")
-        if not math.isclose(sum(probabilities), 1.0, rel_tol=1e-10, abs_tol=1e-10):
-            raise ValueError("categorical probabilities must sum to 1")
-        expected = probabilities[ids.index(row["action"])]
-    else:
-        raise ValueError("unsupported logging policy")
+    expected = logging_action_probabilities(row)[row["action"]]
     if not math.isclose(propensity, expected, rel_tol=1e-10, abs_tol=1e-12):
         raise ValueError("propensity inconsistent with logged policy")
 
