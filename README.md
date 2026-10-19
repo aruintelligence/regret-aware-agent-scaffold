@@ -209,3 +209,24 @@ python3 squad_benchmark.py --dataset dev-v1.1.json \
 GitHub Actions workflow `squad-human-gold.yml` downloads the official dataset during the run, prints its SHA-256, executes the benchmark, and uploads only the resulting reports. The raw dataset is not committed or archived. Benchmark labels derive from human-annotated answer offsets, but the grading implementation is ours and must be independently audited before claims about performance. The SQuAD *development* set is public; these are reproducible exploratory measurements, **not hidden-test leaderboard results**. Any later tuning on the same data invalidates treating that data as an untouched holdout.
 
 The strongest scientific claim supported by this benchmark is about the **specific sentence retrieval algorithms on the specific annotated task**. It does not prove a general improvement in the underlying Divine Whisper scripted agent, nor does it establish a commercial product.
+
+
+## Opt-in real LLM evaluation (LM Studio / OpenAI-compatible)
+
+**A genuine model endpoint is required; none is bundled or simulated as a real model.** The `llm_squad_benchmark.py` adapter can evaluate a real local model against SQuAD human gold answers. It compares two *prompt-routing strategies* (direct concise answer vs explicitly grounded extractive answer) with a 50/50 randomized logging policy and independent normalized token-F1 grading. This is an actual model execution only when the operator connects a real running model.
+
+```bash
+# Start an OpenAI-compatible local server (for example LM Studio on port 1234).
+# Download official SQuAD dev JSON as described above.
+python3 llm_squad_benchmark.py \
+  --dataset dev-v1.1.json \
+  --out-dir local-llm-report \
+  --model YOUR_LOADED_LOCAL_MODEL_NAME \
+  --endpoint http://127.0.0.1:1234/v1/chat/completions \
+  --limit 20 \
+  --acknowledge-model-calls
+```
+
+The command refuses to make model requests unless `--acknowledge-model-calls` is supplied. By default only loopback endpoints are allowed. A remote endpoint additionally requires HTTPS and `--allow-remote`, which may incur third-party costs and transmit the SQuAD passage and question to that service. Optional API credentials are read from the `ARU_LLM_API_KEY` environment variable; never put API keys in command lines or repository files. Redirects are blocked to prevent escaping the chosen endpoint. The HTTP adapter enforces request timeouts, prompt/output limits, and a maximum of 500 requests per run. Each decision is logged *before* execution; failed model requests receive no fabricated outcome label.
+
+The repository CI tests the LLM HTTP contract with a local **mock server**. Those mock tests prove API plumbing, safety boundaries, and grading code; they do **not** prove any model's performance. A real LM Studio server/model is not available to GitHub Actions by default, so real model results must be produced and inspected by the operator. The SQuAD public dev set is not a hidden test and should not be used for post-hoc leaderboard claims.
