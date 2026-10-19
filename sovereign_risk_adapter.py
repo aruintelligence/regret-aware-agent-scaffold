@@ -69,6 +69,29 @@ def answer_with_sovereign_risk(
         policy=policy, key=risk_key,
         trusted_group=trusted_group, rubric_id=rubric_id,
     )
+    # Reduce the time-of-check/time-of-use gap: check authorization again
+    # immediately before returning a successfully screened answer. This is
+    # NOT atomic with HTTP delivery and cannot replace a production lock.
+    if result.get("accepted"):
+        try:
+            final_authorization = authorize_source(
+                registry_db, context, owner=owner, purpose=purpose,
+                key=registry_key,
+            )
+        except (ValueError, TypeError, OSError, RuntimeError):
+            return {**base, "reason": "final_source_authorization_unavailable"}
+        if not final_authorization["authorized"]:
+            return {**base, "reason": "source_revoked_during_inference"}
+        if registry_checkpoint is not None:
+            try:
+                final_anchor = verify_source_checkpoint(
+                    registry_db, registry_checkpoint,
+                    registry_key=registry_key, anchor_key=registry_anchor_key,
+                )
+            except (ValueError, TypeError, OSError, RuntimeError):
+                return {**base, "reason": "final_checkpoint_verification_failed"}
+            if not final_anchor["verified"]:
+                return {**base, "reason": "final_checkpoint_verification_failed"}
     return {
         **result,
         "source_authorization": "active_purpose_scoped_operator_attestation",
