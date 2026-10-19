@@ -109,8 +109,11 @@ def gold_span_contained(span, answers):
     )
 
 
-def load_questions(dataset_path, limit=2000):
-    """Stable ID-hash sample; no sorting or filtering by outcome."""
+def load_questions(dataset_path, limit=2000, offset=0):
+    """Stable ID-hash sample; no sorting or filtering by outcome.
+
+    Offset supports prospectively reserved disjoint follow-up subsets.
+    """
     raw = Path(dataset_path).read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     payload = json.loads(raw)
@@ -137,6 +140,8 @@ def load_questions(dataset_path, limit=2000):
                     raise ValueError("answer offsets do not match passage text")
                 items.append((qid, title, context, qa["question"], answers))
     items.sort(key=lambda row: hashlib.sha256(row[0].encode("utf-8")).hexdigest())
-    if limit < 1:
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         raise ValueError("limit must be positive")
-    return items[:limit], digest, len(items)
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        raise ValueError("offset must be a nonnegative integer")
+    return items[offset:offset + limit], digest, len(items)
