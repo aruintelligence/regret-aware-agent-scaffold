@@ -48,6 +48,7 @@ jobs:
           aru-qa-serve --help > /dev/null
           aru-risk --help > /dev/null
           aru-watch --help > /dev/null
+          aru-watch-ledger --help > /dev/null
           aru-watch-real-audit --help > /dev/null
           aru-watch-change-point-audit --help > /dev/null
           aru-watch-calibrated-audit --help > /dev/null
@@ -132,6 +133,27 @@ jobs:
           assert not report["degradation_alarm"]
           assert report["automatic_rollout_permitted"] is False
           print("Synthetic signed prospective watch passed; no safety claim.")
+          PY
+      - name: Verify complete closed-cohort ledger and missing-grade denial
+        run: |
+          python - <<'PY'
+          from watch_outcome_ledger import create_issued_checkpoint, reconcile_issued_grades, verify_complete_report
+          ingress, monitor = b"synthetic-ingress-key-32-separate-bytes", b"synthetic-monitor-key-32-separate-bytes"
+          issued = [dict(sequence=i, request_id=f"test-{i}", group="general", model_revision="fixed",
+                         rubric_id="v1") for i in range(1, 31)]
+          grades = [dict(request_id=f"test-{i}", error=False, rubric_id="v1", grader_id="fixture")
+                    for i in range(1, 31)]
+          checkpoint = create_issued_checkpoint(issued, cohort_id="ci-demo", groups=["general"],
+              model_revision="fixed", rubric_id="v1", ingress_key=ingress)
+          assert reconcile_issued_grades(issued, grades[:-1], checkpoint=checkpoint,
+              ingress_key=ingress, watch_key=monitor)["status"] == "pending_grades"
+          report = reconcile_issued_grades(issued, grades, checkpoint=checkpoint,
+              ingress_key=ingress, watch_key=monitor)["report"]
+          assert verify_complete_report(report, issued, grades, checkpoint=checkpoint,
+              ingress_key=ingress, watch_key=monitor)
+          assert report["issued_count"] == report["graded_count"] == 30
+          assert not report["automatic_rollout_permitted"]
+          print("Closed-cohort synthetic reconciliation passed; no live completeness claim.")
           PY
       - name: Verify original scaffold benchmark
         run: python benchmark.py --runs 3 > /dev/null

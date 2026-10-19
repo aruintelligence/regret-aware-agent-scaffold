@@ -46,6 +46,8 @@ For `J` predeclared groups, monitor each group and the aggregate with `alpha_sli
 
 The caller must obtain the current digest from a trusted source; supplying the digest copied from the report defeats replay protection. A compromised signing key, incomplete labels, selective reporting, or a malicious monitoring pipeline can still undermine the system.
 
+The optional [closed-cohort outcome ledger](COMPLETE_OUTCOME_LEDGER.md) supplies a concrete way to check completeness **against a separately signed issued-request manifest**. It signs no watch when any request is still ungraded, rejects extra or duplicate grades, and has a separate `gate_with_complete_ledger` that requires the current ingress checkpoint. This is only as complete as the ingress boundary itself; it does not certify that every real request was captured.
+
 ## Operator example
 
 Provide a prospective JSONL stream with **exactly** `event_id`, `group`, and `error` (strict boolean), ordered by the trusted observation sequence:
