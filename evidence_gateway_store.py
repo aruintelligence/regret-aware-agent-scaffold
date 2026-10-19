@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -47,11 +48,27 @@ def _validate_event(kind, payload):
             if not isinstance(candidate, dict) or set(candidate) - CANDIDATE_KEYS:
                 raise ValueError("unknown candidate fields rejected")
         validate_decision(payload)
+        timestamp = payload.get("timestamp_unix")
+        if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)) or not math.isfinite(timestamp) or timestamp < 0:
+            raise ValueError("decision timestamp must be finite and nonnegative")
+        loops = payload.get("loop_count")
+        if isinstance(loops, bool) or not isinstance(loops, int) or not 0 <= loops <= 100:
+            raise ValueError("invalid loop count")
+        runtime = payload.get("runtime_kind")
+        if not isinstance(runtime, str) or not runtime or len(runtime) > 128 or "\n" in runtime:
+            raise ValueError("invalid runtime kind")
+        if len(payload["task_signature"]) > 512 or "\n" in payload["task_signature"]:
+            raise ValueError("invalid task signature")
+        if len(payload["decision_id"]) > 128:
+            raise ValueError("decision ID too long")
         return payload["decision_id"]
     if kind == "label":
         if set(payload) - LABEL_KEYS:
             raise ValueError("unknown label fields rejected")
         validate_label(payload)
+        graded = payload.get("graded_at_unix")
+        if isinstance(graded, bool) or not isinstance(graded, (int, float)) or not math.isfinite(graded) or graded < 0:
+            raise ValueError("label timestamp must be finite and nonnegative")
         return payload["decision_id"]
     raise ValueError("unsupported event kind")
 
