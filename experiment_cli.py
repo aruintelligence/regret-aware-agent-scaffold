@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 from pathlib import Path
 
 from evidence_dashboard import save_dashboard
+from evidence_audit import build_manifest, save_manifest, verify_manifest
 from evidence_lab import add_label, evaluate_experiment
 from route_experiments import (
     ExperimentRuntime, action_id, append_jsonl, validate_decision,
@@ -134,6 +136,36 @@ def demo(args) -> None:
     print("SYNTHETIC DEMO ONLY — generated outcomes do not validate the actual agent.")
 
 
+def _hmac_secret(env_name):
+    if not env_name:
+        return None
+    value = os.environ.get(env_name)
+    if not value:
+        raise ValueError("HMAC key environment variable is missing or empty")
+    return value.encode("utf-8")
+
+
+def attest(args) -> None:
+    manifest = build_manifest(
+        args.decisions, args.labels, report_path=args.report_json,
+        secret=_hmac_secret(args.hmac_key_env),
+    )
+    save_manifest(manifest, args.manifest)
+    print(json.dumps({"manifest": args.manifest,
+                      "authentication": manifest["authentication"],
+                      "counts": manifest["counts"]}, indent=2))
+
+
+def verify(args) -> None:
+    result = verify_manifest(
+        args.manifest, args.decisions, args.labels,
+        report_path=args.report_json, secret=_hmac_secret(args.hmac_key_env),
+    )
+    print(json.dumps(result, indent=2))
+    if not result["verified"]:
+        raise SystemExit(1)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -174,6 +206,22 @@ def build_parser() -> argparse.ArgumentParser:
     demo_parser.add_argument("--n", type=int, default=900)
     demo_parser.add_argument("--seed", type=int, default=7)
     demo_parser.set_defaults(handler=demo)
+    attest_parser = sub.add_parser("attest", help="Create non-overwriting evidence checksum/HMAC manifest")
+    attest_parser.add_argument("--decisions", required=True)
+    attest_parser.add_argument("--labels", required=True)
+    attest_parser.add_argument("--report-json")
+    attest_parser.add_argument("--manifest", required=True)
+    attest_parser.add_argument("--hmac-key-env", help="Environment variable holding an optional secret")
+    attest_parser.set_defaults(handler=attest)
+
+    verify_parser = sub.add_parser("verify", help="Verify evidence bundle against its manifest")
+    verify_parser.add_argument("--decisions", required=True)
+    verify_parser.add_argument("--labels", required=True)
+    verify_parser.add_argument("--report-json")
+    verify_parser.add_argument("--manifest", required=True)
+    verify_parser.add_argument("--hmac-key-env")
+    verify_parser.set_defaults(handler=verify)
+
     return parser
 
 
