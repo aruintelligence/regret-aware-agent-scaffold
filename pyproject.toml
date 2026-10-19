@@ -30,6 +30,7 @@ real-model = ["torch==2.5.1", "transformers==4.48.3", "safetensors==0.5.3"]
 
 [project.scripts]
 aru-risk = "selective_risk_cli:main"
+aru-watch = "anytime_risk_watch_cli:main"
 aru-evidence = "experiment_cli:main"
 aru-gateway = "evidence_gateway:main"
 aru-squad = "squad_benchmark:main"
@@ -75,6 +76,8 @@ py-modules = [
   "sovereign_risk_adapter",
   "selective_risk_cli",
   "selective_risk_gate",
+  "anytime_risk_watch",
+  "anytime_risk_watch_cli",
   "evidence_quorum",
   "quorum_registry_adapter",
   "extractive_qa_engine",
