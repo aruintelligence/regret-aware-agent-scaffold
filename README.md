@@ -520,3 +520,45 @@ aru-qa-proof --dataset dev-v1.1.json --out-dir real-qa-proof-report \
 ```
 
 The new real-model CI job downloads the specialized model weights, records the immutable revision, executes the comparison, and uploads aggregate-only reports. **Source-backed does not mean factually correct.** Neither this experiment nor a high F1 score would establish safety, truthfulness, customer ROI, or enterprise readiness.
+
+
+### Authenticated local extractive QA API
+
+A separate research server `qa_local_server.py` now exposes **`POST /v1/qa/proof`** on **127.0.0.1:1235**. It requires a randomly generated bearer API key, an explicit research-opt-in header, and a strict JSON schema. It returns a source-offset certificate or abstention, never the entire passage. All accepted answers are independently verified against the source before the API responds.
+
+```bash
+export ARU_QA_API_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+aru-qa-serve --model distilbert/distilbert-base-cased-distilled-squad --port 1235
+```
+
+In another process, with the same API key set:
+
+```python
+import json, os, urllib.request
+from grounding_contract import verify_grounding
+
+source = "The telescope was in Oregon."
+request = urllib.request.Request(
+    "http://127.0.0.1:1235/v1/qa/proof",
+    data=json.dumps({
+        "model": "distilbert/distilbert-base-cased-distilled-squad",
+        "context": source,
+        "question": "Where was the telescope?",
+    }).encode("utf-8"),
+    headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + os.environ["ARU_QA_API_KEY"],
+        "X-ARU-Consent": "research-opt-in",
+    },
+    method="POST",
+)
+with urllib.request.urlopen(request, timeout=90) as response:
+    result = json.loads(response.read())
+if result["accepted"]:
+    assert verify_grounding(result["proof"], source)
+    print(result["answer"])
+else:
+    print("Abstained")
+```
+
+**Research only.** The API key is a local access control, not enterprise authentication or verified human consent. The endpoint lacks TLS, tenant isolation, retention controls and external security audit. A verifiable source span may still be factually wrong.
