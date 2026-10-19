@@ -223,6 +223,7 @@ jobs:
           TOKENIZERS_PARALLELISM: 'false'
         run: |
           mkdir -p real-model-report
+          sha256sum REAL_MODEL_PROTOCOL.md > real-model-report/protocol.sha256
           python hf_local_server.py --model HuggingFaceTB/SmolLM2-135M-Instruct --threads 2 --port 1234 --metadata-json real-model-report/model.json > real-model-server.log 2>&1 &
           echo $! > /tmp/aru-real-model.pid
           for i in $(seq 1 150); do
@@ -285,6 +286,7 @@ jobs:
           name: aru-real-open-weight-model-human-gold
           path: |
             real-model-report/model.json
+            real-model-report/protocol.sha256
             real-model-report/health.json
             real-model-report/evaluation/index.html
             real-model-report/evaluation/report.json
