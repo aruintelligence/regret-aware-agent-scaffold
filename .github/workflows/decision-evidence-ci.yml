@@ -131,6 +131,7 @@ jobs:
           for stress in oracle["topic_mix_stress"]:
               print("ADVERSARIAL TOPIC MIX:", stress["requested_tv_budget"],
                     "worst_case_uplift=", stress["worst_case_uplift"])
+          print("BREAK-EVEN TOPIC SHIFT RADIUS:", oracle["break_even_topic_shift_tv"])
           print("OPE SNIPS difference:", report["paired_difference"]["snips_difference"])
           print("Dataset SHA256:", oracle["dataset_sha256"])
           PY
