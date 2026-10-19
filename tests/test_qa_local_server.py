@@ -1,5 +1,6 @@
 """Authenticated local QA API tests with a fake engine and no external requests."""
 import json
+import sqlite3
 import tempfile
 import threading
 import unittest
@@ -9,6 +10,7 @@ import urllib.request
 from grounding_contract import ground_answer, verify_grounding
 from qa_local_server import make_server
 from sovereign_source_registry import grant_source, revoke_source
+from source_registry_anchor import create_source_checkpoint
 from pathlib import Path
 
 
@@ -131,6 +133,50 @@ class QALocalServerTests(unittest.TestCase):
                 self.assertEqual(status, 403)
                 self.assertEqual(body["reason"], "grant_revoked_or_expired")
                 self.assertEqual(len(self.engine.calls), 1)
+            finally:
+                self.url = original_url
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+
+    def test_independently_anchored_qa_server_rejects_revocation_rollback(self):
+        source = "The observatory is in Oregon."
+        owner = "opaque-owner-anchored"
+        registry_key = b"anchored-source-registry-test-key-32"
+        anchor_key = b"separate-source-checkpoint-test-key-32"
+        with tempfile.TemporaryDirectory() as folder:
+            db = str(Path(folder) / "consent.db")
+            checkpoint = str(Path(folder) / "external-checkpoint.json")
+            grant = grant_source(
+                db, source, owner=owner, purpose="qa_source",
+                ttl_seconds=600, key=registry_key, consent_asserted=True,
+            )
+            revoke_source(db, grant["grant_id"], owner=owner, key=registry_key)
+            create_source_checkpoint(
+                db, checkpoint, registry_key=registry_key, anchor_key=anchor_key,
+            )
+            with sqlite3.connect(db) as conn:
+                conn.execute("DELETE FROM consent_events WHERE seq=2")
+            # The truncated local chain still verifies, but the independent
+            # checkpoint prevents the deleted revocation from restoring access.
+            server = make_server(
+                self.engine, self.key, port=0,
+                registry_db=db, registry_key=registry_key,
+                registry_checkpoint=checkpoint, registry_anchor_key=anchor_key,
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            original_url = self.url
+            self.url = f"http://127.0.0.1:{server.server_port}"
+            try:
+                status, body = self.post({
+                    "model": self.engine.model_id,
+                    "context": source,
+                    "question": "Where?",
+                }, owner=owner)
+                self.assertEqual(status, 403)
+                self.assertEqual(body["error"], "source_checkpoint_invalid")
+                self.assertEqual(len(self.engine.calls), 0)
             finally:
                 self.url = original_url
                 server.shutdown()
