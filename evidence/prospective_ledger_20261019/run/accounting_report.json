@@ -1,0 +1,22 @@
+{
+  "automatic_rollout_permitted": false,
+  "cohort_id": "squad-680-799-prospective-ledger-v1",
+  "dataset_sha256": "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9",
+  "degradation_alarm": false,
+  "errors": 15,
+  "graded": 120,
+  "independent_ingress_operator": false,
+  "independently_audited_grader": false,
+  "ingress_checkpoint_hmac_sha256": "eb6d112047ae4f3b4d907d2303722d5a2e737e84294e80e71cc40ade3a91dbec",
+  "issued_manifest_sha256": "405a239cc6a0d875e6fad9282ea47628c800e3adef0d94f9c1ea41cecd97b6cd",
+  "kind": "aru_prospective_public_real_model_outcome_accounting",
+  "model_call_failures_counted_as_errors": 0,
+  "model_id": "distilbert/distilbert-base-cased-distilled-squad",
+  "model_revision": "564e9b582944a57a3e586bbb98fd6f0a4118db7f",
+  "offset": 680,
+  "ordered_grades_sha256": "680039baece3015ffa011a8380f691e72fc5ac90c97aefbc36e1a1af5ea023ae",
+  "ordered_outcomes_sha256": "1209d48101c97545b10477b9cfb1cc3977661e3bbd668bed3b828cea46dfbd25",
+  "preinference_manifest_created_before_model_calls": true,
+  "requested": 120,
+  "verified_source_certificates": 120
+}
