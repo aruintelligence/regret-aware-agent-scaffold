@@ -45,6 +45,7 @@ py-modules = [
   "experiment_cli",
   "external_adapter",
   "scientific_validation",
+  "distribution_robustness",
   "squad_sentence_retrieval",
   "squad_benchmark",
   "llm_executor",
