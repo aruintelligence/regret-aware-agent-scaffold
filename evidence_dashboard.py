@@ -39,11 +39,40 @@ def render_dashboard(report: dict) -> str:
     )
     is_synthetic = report["label_source_counts"].get("synthetic", 0) > 0
     is_human_gold = any("squad1.1_human_annotated" in kind for kind in report.get("runtime_kind", []))
+    is_llm_gold = any("opt_in_openai_compatible_llm" in kind for kind in report.get("runtime_kind", []))
     badge = ("SYNTHETIC DEMONSTRATION" if is_synthetic else
-             "PUBLIC HUMAN-ANNOTATED BENCHMARK" if is_human_gold else
+             "PUBLIC HUMAN-ANNOTATED RETRIEVAL BENCHMARK" if is_human_gold else
+             "OPERATOR-SUPPLIED LLM · HUMAN-GOLD BENCHMARK" if is_llm_gold else
              "SELF-ATTESTED EXTERNAL LABELS")
     status = "REVIEW SCREEN PASSED" if gate["candidate_for_human_review"] else "NOT CLEARED FOR REVIEW"
-    benchmark_notice = ('<p class="notice"><strong>Benchmark scope:</strong> SQuAD human-annotated sentence retrieval only. This does not measure LLM reasoning, complete question answering, or enterprise agent performance.</p>' if is_human_gold else "")
+    benchmark_notice = (
+        '<p class="notice"><strong>Benchmark scope:</strong> SQuAD human-annotated sentence retrieval only. This does not measure LLM reasoning, complete question answering, or enterprise agent performance.</p>'
+        if is_human_gold else
+        '<p class="notice"><strong>Real model execution is operator supplied.</strong> Public SQuAD dev-set scores do not establish general reasoning, hidden-test performance, or commercial readiness.</p>'
+        if is_llm_gold else ""
+    )
+    direct = report.get("external_benchmark")
+    direct_panel = ""
+    if is_human_gold and direct:
+        interval = direct["paired_article_cluster_interval"]
+        lower = interval["lower_95"] * 100
+        upper = interval["upper_95"] * 100
+        improvement = direct["difference"] * 100
+        direct_panel = (
+            '<section class="panel"><div class="eyebrow">Direct full-information audit · independently annotated</div>'
+            '<h2>Human-gold sentence retrieval</h2>'
+            '<div class="compare"><div class="card"><div class="label">Baseline · lexical overlap</div>'
+            '<div class="value">' + _percent(direct["baseline_accuracy"]) + '</div></div>'
+            '<div class="card"><div class="label">Challenger · IDF + proximity</div>'
+            '<div class="value">' + _percent(direct["candidate_accuracy"]) + '</div></div></div>'
+            '<p><strong>Direct observed difference: ' + f'{improvement:+.2f}' + ' percentage points.</strong> '
+            + f'{direct["n_evaluated"]:,}' + ' public human-annotated questions; '
+            + f'{interval["clusters"]:,}' + ' article clusters.</p>'
+            '<p>Exploratory article-cluster bootstrap 95% interval: <strong>'
+            + f'{lower:+.2f} to {upper:+.2f}' + ' percentage points</strong>.</p>'
+            '<p class="sub">Negative article-level domains flagged: '
+            + str(direct["negative_article_count"]) + '. This is sentence retrieval, not an LLM or general-agent test.</p></section>'
+        )
     reasons = "".join(f"<li>{escape(reason)}</li>" for reason in gate["reasons"])
     limitations = "".join(f"<li>{escape(reason)}</li>" for reason in report["limitations"])
     source = ", ".join(f"{escape(str(k))}: {int(v)}" for k, v in report["label_source_counts"].items())
@@ -85,7 +114,8 @@ ul{{padding-left:22px;color:var(--muted)}}li{{margin:7px 0}}footer{{color:var(--
 <section class="card"><div class="label">Labeled outcomes</div><div class="value">{report["n_labeled"]:,}</div><div class="sub">{report["n_unlabeled"]:,} still unlabeled</div></section>
 <section class="card"><div class="label">Candidate uplift (SNIPS)</div><div class="value">{delta_display}</div><div class="sub">Candidate minus baseline · exploratory</div></section>
 </div>
-<h2>Policy comparison</h2>
+{direct_panel}
+<h2>Policy comparison · propensity-weighted estimate</h2>
 <div class="compare">
 <section class="card"><div class="label">Baseline · {escape(report["baseline_policy"])}</div><div class="value">{_percent(baseline["snips"])}</div>{_bar(baseline["snips"], "Baseline self-normalized estimate", "cyan")}<div class="sub">Self-normalized inverse propensity estimate</div></section>
 <section class="card"><div class="label">Candidate · {escape(report["candidate_policy"])}</div><div class="value">{_percent(candidate["snips"])}</div>{_bar(candidate["snips"], "Candidate self-normalized estimate", "gold")}<div class="sub">Self-normalized inverse propensity estimate</div></section>
