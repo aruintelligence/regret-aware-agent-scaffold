@@ -80,9 +80,12 @@ def render_dashboard(report: dict) -> str:
             for item in direct.get("topic_mix_stress", [])
         )
         if stress_rows:
+            radius = direct.get("break_even_topic_shift_tv")
+            radius_text = f'{radius*100:.1f}%' if radius is not None else "Not erased by observed-topic reweighting"
             direct_panel += (
                 '<section class="panel"><div class="eyebrow">Adversarial robustness · observed topics only</div>'
                 '<h2>What if tomorrow’s tasks look different?</h2>'
+                '<p><strong>Observed-topic break-even shift radius: ' + radius_text + '</strong></p>'
                 '<p class="sub">Worst-case measured uplift when probability mass is moved from stronger to weaker observed articles within a total-variation budget.</p>'
                 '<table><thead><tr><th>Topic-mix shift budget</th><th>Worst-case uplift</th><th>Shift used</th></tr></thead>'
                 '<tbody>' + stress_rows + '</tbody></table>'
