@@ -73,6 +73,8 @@ Headers: `Authorization: Bearer <ARU_QA_API_KEY>`, `X-ARU-Consent: research-opt-
 
 The server allows **2–4 documents**, at most 5,000 characters per document, and refuses unknown fields. The operator-scoped registry checks each exact source text, expiry and revocation before inference and again before the receipt is returned. The response contains source fingerprints and offsets but no full passages. A revoked, expired, missing or mismatched grant blocks the request.
 
+When the server is started with an independently retained source-registry checkpoint and separate anchor key, the quorum adapter verifies that checkpoint **before and after inference** as well. This blocks the known attack where an administrator deletes the latest revocation event from an otherwise internally consistent HMAC chain. An external checkpoint does not establish factual truth or independently verified legal consent.
+
 **Consent caveat:** the registry stores operator attestations, not independently verified legal consent. Its HMAC event chain does not detect a deleted tail without a separately retained source checkpoint. Hash-distinct documents are not epistemically independent. The server remains IPv4-loopback-only research infrastructure without TLS, SSO/RBAC, multi-tenancy or external certification.
 
 ## Adversarial tests
