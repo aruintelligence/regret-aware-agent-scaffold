@@ -44,6 +44,12 @@ jobs:
           assert Path("demo-report/index.html").exists()
           print("Synthetic guardrails verified")
           PY
+      - name: Attest and verify the synthetic evidence bundle
+        env:
+          ARU_DEMO_HMAC_KEY: synthetic-ci-test-key-not-a-production-secret
+        run: |
+          python experiment_cli.py attest --decisions demo-report/decisions.synthetic.jsonl --labels demo-report/labels.synthetic.jsonl --report-json demo-report/report.json --manifest demo-report/attestation.json --hmac-key-env ARU_DEMO_HMAC_KEY > /dev/null
+          python experiment_cli.py verify --decisions demo-report/decisions.synthetic.jsonl --labels demo-report/labels.synthetic.jsonl --report-json demo-report/report.json --manifest demo-report/attestation.json --hmac-key-env ARU_DEMO_HMAC_KEY > /dev/null
       - name: Upload synthetic evidence dashboard
         if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
