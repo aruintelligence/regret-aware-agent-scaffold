@@ -128,9 +128,9 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
                         max_weight: float = 20.0,
                         min_labeled: int = 200, min_ess: float = 30.0,
                         min_uplift: float = 0.02) -> dict:
-    if candidate_policy not in ("greedy", "shortest", "evidence_first"):
+    if candidate_policy not in ("greedy", "shortest", "evidence_first", "first_candidate", "second_candidate"):
         raise ValueError("unsupported candidate policy")
-    if baseline_policy not in ("greedy", "shortest", "evidence_first"):
+    if baseline_policy not in ("greedy", "shortest", "evidence_first", "first_candidate", "second_candidate"):
         raise ValueError("unsupported baseline policy")
     if not isinstance(min_labeled, int) or min_labeled < 1 or not math.isfinite(min_ess) or min_ess < 1:
         raise ValueError("invalid review thresholds")
