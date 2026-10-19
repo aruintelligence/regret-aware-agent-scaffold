@@ -98,7 +98,7 @@ P_H0(there exists t with M_t >= 1/alpha) <= alpha.
 
 This supports repeated monitoring *only when the conditional null, prospective inclusion rule, and complete paired observations are valid*. It does **not** make post-hoc public-benchmark results anytime-valid. The implementation uses a fixed bet grid and log-space arithmetic; it never authorizes rollout.
 
-**Falsification:** deterministic tests check ties (`M=1`), losses (wealth falls), all wins (wealth grows and crosses), exact single-bet products, invalid data rejection and long-stream numerical stability.
+**Falsification:** deterministic tests check ties (`M=1`), losses (wealth falls), all wins (wealth grows and crosses), exact single-bet products, invalid data rejection and long-stream numerical stability. `sequential_validation.py` also runs seeded Monte Carlo trials under a known fair conditional null (baseline-only and candidate-only probability 0.20 each) and a known positive alternative (0.10 and 0.30). It reports empirical ever-crossing frequency and alternative detection, clearly labeled as synthetic evidence. The theorem, not finite Monte Carlo, supplies the mathematical guarantee under its assumptions.
 
 ## 6. Prospective pilot power and budget
 
