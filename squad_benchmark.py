@@ -14,6 +14,7 @@ import hashlib
 import json
 import random
 import time
+from collections import defaultdict
 from pathlib import Path
 
 from evidence_dashboard import save_dashboard
@@ -48,6 +49,29 @@ def paired_oracle_interval(pairs, *, replicates=1000, seed=13):
             "replicates": replicates, "method": "paired_question_bootstrap_exploratory"}
 
 
+def cluster_oracle_interval(groups, *, replicates=1000, seed=13):
+    """Resample whole articles/paragraphs, preserving paired outcomes and within-cluster dependence."""
+    if replicates < 100 or not groups:
+        raise ValueError("need nonempty clusters and >=100 resamples")
+    keys = sorted(groups)
+    rng = random.Random(seed)
+    deltas = []
+    for _ in range(replicates):
+        sampled = [keys[rng.randrange(len(keys))] for _ in keys]
+        total = sum(len(groups[key]) for key in sampled)
+        numerator = sum(sum(b - a for a, b in groups[key]) for key in sampled)
+        deltas.append(numerator / total)
+    deltas.sort()
+    def percentile(p):
+        index = p * (len(deltas) - 1)
+        lo = int(index)
+        hi = min(lo + 1, len(deltas) - 1)
+        return deltas[lo] + (deltas[hi] - deltas[lo]) * (index - lo)
+    return {"lower_95": percentile(.025), "upper_95": percentile(.975),
+            "clusters": len(keys), "replicates": replicates,
+            "method": "paired_cluster_bootstrap_exploratory"}
+
+
 def run_benchmark(dataset_path, output_dir, *, limit=2000,
                   seed=20261018, replicates=500):
     questions, dataset_sha256, total = load_questions(dataset_path, limit)
@@ -67,6 +91,8 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
     baseline_action = action_id(BASELINE_ROUTE)
     candidate_action = action_id(CANDIDATE_ROUTE)
     paired = []
+    by_article = defaultdict(list)
+    by_paragraph = defaultdict(list)
     route_time = [0.0, 0.0]
     action_counts = [0, 0]
     examples = []
@@ -82,6 +108,8 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
             int(gold_span_contained(candidate_span, answers)),
         )
         paired.append(outcomes)
+        by_article[title].append(outcomes)
+        by_paragraph[hashlib.sha256(context.encode("utf-8")).hexdigest()].append(outcomes)
         # Equal-probability logging: the evaluator sees only the chosen reward.
         chosen = rng.randrange(2)
         action_counts[chosen] += 1
@@ -124,6 +152,15 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
     baseline_only = sum(a and not b for a, b in paired)
     candidate_only = sum(b and not a for a, b in paired)
     both_wrong = n - both_correct - baseline_only - candidate_only
+    article_diagnostics = [
+        {"article": title, "n": len(group),
+         "baseline_accuracy": sum(a for a, _ in group) / len(group),
+         "candidate_accuracy": sum(b for _, b in group) / len(group),
+         "difference": sum(b - a for a, b in group) / len(group)}
+        for title, group in sorted(by_article.items())
+    ]
+    negative_articles = [row for row in article_diagnostics
+                         if row["n"] >= 20 and row["difference"] < -0.05]
     direct = {
         "dataset": "Stanford SQuAD v1.1 development set",
         "dataset_source": SOURCE_URL,
@@ -146,6 +183,10 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
         "mean_latency_ms": {"baseline": route_time[0] * 1000 / n,
                             "candidate": route_time[1] * 1000 / n},
         "paired_question_interval": paired_oracle_interval(paired, replicates=replicates, seed=seed + 1),
+        "paired_paragraph_cluster_interval": cluster_oracle_interval(by_paragraph, replicates=replicates, seed=seed + 2),
+        "paired_article_cluster_interval": cluster_oracle_interval(by_article, replicates=replicates, seed=seed + 3),
+        "article_diagnostics": article_diagnostics,
+        "negative_article_count": len(negative_articles),
         "audit_examples": examples,
         "scope": "human-annotated sentence retrieval, not LLM question answering",
     }
@@ -155,6 +196,12 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
         replicates=replicates, seed=seed,
     )
     report["external_benchmark"] = direct
+    if negative_articles:
+        report["review_gate"]["candidate_for_human_review"] = False
+        report["review_gate"]["reasons"].insert(
+            0, "Full-information article-level regressions observed in "
+            + str(len(negative_articles)) + " topic(s); investigate before review"
+        )
     report["full_information_crosscheck"] = {
         "direct_difference": direct["difference"],
         "logged_snips_difference": report["paired_difference"]["snips_difference"],
@@ -164,6 +211,9 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
     }
     report["limitations"].append(
         "SQuAD is a human-annotated benchmark but this test measures sentence retrieval only, not full answer extraction or LLM ability."
+    )
+    report["limitations"].append(
+        "Article/paragraph cluster bootstrap intervals account for within-cluster correlation only approximately; they are exploratory, not confirmatory."
     )
     report["limitations"].append(
         "Full-information outcomes are used solely for the offline audit; only the randomized chosen reward enters the off-policy estimator."
