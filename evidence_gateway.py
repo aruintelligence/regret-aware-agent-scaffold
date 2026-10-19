@@ -24,6 +24,7 @@ from evidence_gateway_store import (
 from evidence_lab import evaluate_experiment
 from evidence_dashboard import save_dashboard
 from evidence_audit import build_manifest, save_manifest
+from evidence_checkpoint import create_checkpoint, verify_checkpoint
 
 
 def _load_secret(name, min_bytes):
@@ -182,6 +183,12 @@ def main():
     report.add_argument("--baseline-policy", default="greedy")
     report.add_argument("--candidate-policy", default="shortest")
     report.add_argument("--replicates", type=int, default=300)
+    anchor = sub.add_parser("anchor", help="Write independently signed audit checkpoint")
+    anchor.add_argument("--db", required=True)
+    anchor.add_argument("--checkpoint", required=True)
+    check = sub.add_parser("verify-anchor", help="Verify historical chain against external checkpoint")
+    check.add_argument("--db", required=True)
+    check.add_argument("--checkpoint", required=True)
     args = parser.parse_args()
     hmac_key = _load_secret("ARU_GATEWAY_HMAC_KEY", 16)
     if args.command == "serve":
@@ -196,6 +203,21 @@ def main():
             server.server_close()
     elif args.command == "verify":
         print(json.dumps(verify_chain(args.db, hmac_key=hmac_key), indent=2))
+    elif args.command == "anchor":
+        independent_key = _load_secret("ARU_ANCHOR_HMAC_KEY", 32)
+        print(json.dumps(create_checkpoint(
+            args.db, args.checkpoint, gateway_key=hmac_key,
+            anchor_key=independent_key,
+        ), indent=2))
+    elif args.command == "verify-anchor":
+        independent_key = _load_secret("ARU_ANCHOR_HMAC_KEY", 32)
+        result = verify_checkpoint(
+            args.db, args.checkpoint, gateway_key=hmac_key,
+            anchor_key=independent_key,
+        )
+        print(json.dumps(result, indent=2))
+        if not result["verified"]:
+            raise SystemExit(1)
     elif args.command == "report":
         print(json.dumps(build_report_from_gateway(
             args.db, args.out_dir, hmac_key=hmac_key,
