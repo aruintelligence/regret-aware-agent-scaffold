@@ -576,3 +576,14 @@ A source certificate establishes that an answer appears in a passage, but not wh
 - **Research CLI:** `aru-source-registry grant|check|revoke|verify|anchor|verify-anchor`.
 
 **Trust boundary:** this is single-operator, local research infrastructure. The owner header is not authenticated independently of the shared API bearer key. A checkpoint cannot protect newer, unanchored events. No enterprise identity verification, encrypted-at-rest metadata, multi-tenant isolation, or public hosting is claimed. Real human consent and source ownership must be established through an external process.
+
+## Multi-source Evidence Quorum (conflict-aware research API)
+
+The new [Evidence Quorum research module](EVIDENCE_QUORUM.md) addresses a weakness of single-document citations: multiple documents may disagree. ĀRU now verifies each proposed short answer as a source span, deduplicates identical source fingerprints, **abstains if verified sources disagree**, and requires a configurable minimum number of distinct agreeing source fingerprints. The revocable, purpose-scoped Sovereign Source Registry prevents unapproved documents from reaching the local model and rechecks authorization after inference.
+
+`qa_local_server.py` exposes an authenticated, consent-header-gated `POST /v1/qa/quorum` endpoint for **2–4 operator-approved documents**. The API is disabled until the consent-scoped source registry is configured; all documents must have active owner-matched `qa_source` grants. The response includes a reproducible checksum receipt, source hashes and offsets; raw passages are not returned. **A checksum is not a signature, and matching sources do not establish truth, independent provenance, or factual entailment.** This remains loopback-only research infrastructure with no automatic rollout.
+
+
+### Revocable multi-document authorization
+
+The quorum endpoint is integrated with the existing **Sovereign Source Registry**. Before processing any of 2–4 documents, ĀRU verifies that every exact source has an active `qa_source` grant for the requesting owner. It checks all grants **again after inference** so a mid-request revocation blocks the answer. The deterministic `quorum_registry_adapter.py` also rejects duplicate source IDs and returns a reproducible, source-fingerprint-based agreement or conflict receipt. The source registry records operator attestations, not independently verified legal consent; revocation cannot be atomic with an HTTP response. See [EVIDENCE_QUORUM.md](EVIDENCE_QUORUM.md).
