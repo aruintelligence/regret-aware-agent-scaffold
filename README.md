@@ -295,3 +295,18 @@ flowchart LR
 ```
 
 The diagram shows research and proposed review flow, **not automatic production deployment**. No module can prove its own scientific claims merely by generating a dashboard or HMAC signature. Evidence must come from real task outcomes and independent assessment.
+
+
+## Installable alpha CLI
+
+For developers who want to test the prototype in an isolated Python environment:
+
+```bash
+python3 -m pip install .
+aru-evidence --help
+aru-gateway --help
+aru-squad --help
+aru-llm-squad --help
+```
+
+The package is an **alpha research distribution**, not a hosted SaaS, production API, or PyPI release. Runtime modules use only the Python standard library; the optional packaging step requires setuptools. Do not install or expose the local HTTP gateway as a public service without a security review.
