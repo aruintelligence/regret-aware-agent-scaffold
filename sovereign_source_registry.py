@@ -22,6 +22,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 GENESIS = "0" * 64
@@ -87,15 +88,21 @@ def _initialize(path):
         _INITIALIZED.add(identity)
 
 
+@contextmanager
 def _open(path, *, create):
+    """Always commit/rollback and close SQLite connections, including failures."""
     path = Path(path)
     if not create and not path.is_file():
         raise FileNotFoundError("source registry does not exist")
     if create:
         _initialize(path)
     db = sqlite3.connect(str(path), timeout=30)
-    db.execute("PRAGMA busy_timeout=30000")
-    return db
+    try:
+        db.execute("PRAGMA busy_timeout=30000")
+        with db:
+            yield db
+    finally:
+        db.close()
 
 
 def _verify_locked(db, key):
