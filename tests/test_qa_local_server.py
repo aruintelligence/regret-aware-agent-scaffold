@@ -122,6 +122,9 @@ class QALocalServerTests(unittest.TestCase):
                 self.assertEqual(status, 200)
                 self.assertTrue(body["accepted"])
                 self.assertEqual(body["source_authorization"]["grant_id"], grant["grant_id"])
+                self.assertFalse(body["source_authorization"]["human_identity_verified"])
+                self.assertFalse(body["source_authorization"]["legal_consent_verified"])
+                self.assertFalse(body["source_authorization"]["independent_checkpoint_verified"])
                 self.assertEqual(self.post(payload, owner="different-owner")[0], 403)
                 self.assertEqual(self.post(
                     {**payload, "context": source + " "}, owner=owner,
