@@ -122,6 +122,7 @@ class AnytimeRiskWatchTests(unittest.TestCase):
         kwargs = {
             "policy": signed_policy, "policy_key": POLICY_KEY,
             "watch_report": signed_watch, "watch_key": WATCH_KEY,
+            "expected_outcomes_sha256": signed_watch["ordered_outcomes_sha256"],
             "score": 0.9, "group": "general",
             "source_proof": proof, "source_text": source,
             "model_revision": "fixed-qa-sha",
@@ -138,6 +139,9 @@ class AnytimeRiskWatchTests(unittest.TestCase):
             ({"group": "unknown"}, "unmonitored_group"),
             ({"model_revision": "new-model"}, "watch_model_or_rubric_mismatch"),
             ({"source_text": source + " altered"}, "invalid_source_certificate"),
+            ({"expected_outcomes_sha256": "0" * 64}, "missing_or_stale_watch_checkpoint"),
+            ({"expected_outcomes_sha256": None}, "missing_or_stale_watch_checkpoint"),
+            ({"min_group_outcomes": 121}, "insufficient_recent_group_outcomes"),
         ):
             with self.subTest(update=update):
                 result = gate_with_risk_watch(**{**kwargs, **update})
