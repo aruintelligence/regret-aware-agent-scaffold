@@ -59,3 +59,12 @@ For stricter reproducibility, rerun with the exact model commit hash recorded by
 ## Commercial relevance
 
 This test validates one important *integration* prerequisite for a prospective enterprise pilot. It does not validate market demand, ROI, production security, or the effectiveness of an AI routing policy on customer tasks. Those require a separately planned, consented, blinded and appropriately powered customer evaluation.
+
+
+## Post-discovery matched follow-up (protocol extension before running)
+
+The first 40-question randomized pilot was executed successfully and produced descriptive F1 results, but its arms received **different questions** (29 direct vs 11 grounded). To reduce task-mix noise, a second **exploratory follow-up** is prospectively reserved using **the next 40 SHA-ordered questions** (offset 40, limit 40). This is disjoint from the first sample. The prompts, model and grader remain frozen; no tuning is permitted between samples.
+
+**Follow-up design:** run *both* frozen prompt strategies on *each* of the 40 new public questions, in seeded randomized order; score both with human-gold token F1 and exact match only after generation. Aggregate the paired F1 difference and compute exploratory question-, paragraph- and article-cluster bootstrap intervals with 400 replicates. Do not archive raw passages, responses or answer text. A failed call leaves its question excluded from the complete-pair estimate, with the missingness count disclosed.
+
+**Follow-up integration criterion:** 80 model calls attempted, at least 36 complete matched pairs, at most 4 failed calls, no automatic rollout. There is **no preregistered minimum F1 improvement**; report negative or zero differences faithfully. This public dev-set follow-up was designed after observing the initial randomized pilot, so it is **not a fully independent hidden holdout** and should not be used for confirmatory claims.
