@@ -80,15 +80,26 @@ def validate_decision(row: dict) -> None:
         raise ValueError("duplicate candidate routes")
     if row.get("action") not in ids:
         raise ValueError("selected action missing from candidates")
-    if row.get("logging_policy") != "epsilon_greedy":
-        raise ValueError("unsupported logging policy")
-    epsilon = row.get("epsilon")
+    policy = row.get("logging_policy")
     propensity = row.get("propensity")
-    if not isinstance(epsilon, (int, float)) or isinstance(epsilon, bool) or not math.isfinite(epsilon) or not 0 < epsilon <= 1:
-        raise ValueError("epsilon must be in (0,1]")
-    if not isinstance(propensity, (int, float)) or isinstance(propensity, bool) or not math.isfinite(propensity):
-        raise ValueError("invalid propensity")
-    expected = epsilon / len(ids) + (1 - epsilon if row["action"] == ids[0] else 0)
+    if not isinstance(propensity, (int, float)) or isinstance(propensity, bool) or not math.isfinite(propensity) or not 0 < propensity <= 1:
+        raise ValueError("propensity must be finite and in (0,1]")
+    if policy == "epsilon_greedy":
+        epsilon = row.get("epsilon")
+        if not isinstance(epsilon, (int, float)) or isinstance(epsilon, bool) or not math.isfinite(epsilon) or not 0 < epsilon <= 1:
+            raise ValueError("epsilon must be in (0,1]")
+        expected = epsilon / len(ids) + (1 - epsilon if row["action"] == ids[0] else 0)
+    elif policy == "categorical":
+        probabilities = row.get("candidate_probabilities")
+        if not isinstance(probabilities, list) or len(probabilities) != len(ids):
+            raise ValueError("categorical policy requires one probability per candidate")
+        if any(isinstance(p, bool) or not isinstance(p, (float, int)) or not math.isfinite(p) or p <= 0 for p in probabilities):
+            raise ValueError("categorical probabilities must be finite and positive")
+        if not math.isclose(sum(probabilities), 1.0, rel_tol=1e-10, abs_tol=1e-10):
+            raise ValueError("categorical probabilities must sum to 1")
+        expected = probabilities[ids.index(row["action"])]
+    else:
+        raise ValueError("unsupported logging policy")
     if not math.isclose(propensity, expected, rel_tol=1e-10, abs_tol=1e-12):
         raise ValueError("propensity inconsistent with logged policy")
 
