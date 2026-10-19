@@ -3,6 +3,7 @@ import json
 import sqlite3
 import tempfile
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 import urllib.error
 import urllib.request
@@ -182,6 +183,19 @@ class GatewayHTTPTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(chain["verified"])
         self.assertEqual(chain["events"], 2)
+
+    def test_concurrent_decisions_preserve_audit_chain(self):
+        def send(i):
+            row = decision()
+            row["decision_id"] = f"concurrent-{i}"
+            return self.request("/v1/decisions", payload=row)[0]
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            statuses = list(pool.map(send, range(12)))
+        self.assertEqual(statuses, [201] * 12)
+        status, chain = self.request("/v1/chain")
+        self.assertEqual(status, 200)
+        self.assertTrue(chain["verified"])
+        self.assertEqual(chain["events"], 12)
 
     def test_rejects_unconsented_sensitive_fields(self):
         status, _ = self.request("/v1/decisions", payload={**decision(), "prompt": "private"})
