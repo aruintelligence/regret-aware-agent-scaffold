@@ -562,3 +562,17 @@ else:
 ```
 
 **Research only.** The API key is a local access control, not enterprise authentication or verified human consent. The endpoint lacks TLS, tenant isolation, retention controls and external security audit. A verifiable source span may still be factually wrong.
+
+
+## ĀRU Sovereign Source Registry — consent-scoped memory research
+
+A source certificate establishes that an answer appears in a passage, but not whether the AI had permission to use that passage. The new **[Sovereign Source Registry](SOVEREIGN_SOURCE_REGISTRY.md)** addresses this second question with a local, purpose-scoped, revocable grant ledger.
+
+- **Default deny:** exact source, opaque owner identifier, allowed purpose and unexpired grant must all match.
+- **Operator-attested consent:** granting requires an explicit `--consent-asserted` flag. This does **not** independently verify legal consent or user identity.
+- **Data minimization:** stores keyed HMAC fingerprints of source and owner; never the raw document, question or answer.
+- **Revocation:** a revoked source is denied before QA model inference. HMAC event-chain integrity is checked before authorizing.
+- **Independent history anchoring:** a separate-key checkpoint can detect rollback of an anchored revocation. The QA server can optionally require that checkpoint to verify before answering.
+- **Research CLI:** `aru-source-registry grant|check|revoke|verify|anchor|verify-anchor`.
+
+**Trust boundary:** this is single-operator, local research infrastructure. The owner header is not authenticated independently of the shared API bearer key. A checkpoint cannot protect newer, unanchored events. No enterprise identity verification, encrypted-at-rest metadata, multi-tenant isolation, or public hosting is claimed. Real human consent and source ownership must be established through an external process.
