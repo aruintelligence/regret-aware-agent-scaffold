@@ -57,6 +57,13 @@ class RiskCLITests(unittest.TestCase):
             self.assertTrue(summary["conditional_risk_screen_passed"])
             self.assertEqual(summary["selected_threshold"], 0.5)
             self.assertEqual(call("verify", "--policy", str(policy)).returncode, 0)
+            dashboard = root / "risk-dashboard.html"
+            dashboard_result = call(
+                "dashboard", "--policy", str(policy), "--out", str(dashboard),
+            )
+            self.assertEqual(dashboard_result.returncode, 0, dashboard_result.stderr)
+            self.assertTrue(dashboard.is_file())
+            self.assertIn("Every group must qualify", dashboard.read_text())
             accepted = call(
                 "check", "--policy", str(policy),
                 "--score", "0.9", "--group", "technical",
