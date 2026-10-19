@@ -35,6 +35,13 @@ class LandingPageTests(unittest.TestCase):
             elif not href.startswith(("http://", "https://", "mailto:")):
                 self.assertTrue((ROOT / href).is_file(), href)
 
+    def test_multi_source_conflict_and_truth_limitations_are_visible(self):
+        html = (ROOT / "index.html").read_text(encoding="utf-8")
+        self.assertIn("Evidence Quorum", html)
+        self.assertIn("Conflicting evidence", html)
+        self.assertIn("Agreement is not proof", html)
+        self.assertIn("human investigates", html)
+
     def test_real_evidence_is_presented_with_limitations(self):
         html = (ROOT / "index.html").read_text(encoding="utf-8")
         for expected in ("78.5%", "82.1%", "+3.6 pp", "2,000",
