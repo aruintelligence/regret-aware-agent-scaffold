@@ -148,7 +148,10 @@ class AnytimeRiskWatchTests(unittest.TestCase):
                 self.assertFalse(result["accepted"])
                 self.assertEqual(result["reason"], reason)
         alarm = sign_watch_report(watch(outcomes(40, error=True)), key=WATCH_KEY)
-        blocked = gate_with_risk_watch(**{**kwargs, "watch_report": alarm})
+        blocked = gate_with_risk_watch(**{
+            **kwargs, "watch_report": alarm,
+            "expected_outcomes_sha256": alarm["ordered_outcomes_sha256"],
+        })
         self.assertFalse(blocked["accepted"])
         self.assertEqual(blocked["reason"], "prospective_degradation_alarm")
 
