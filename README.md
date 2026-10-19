@@ -576,3 +576,14 @@ A source certificate establishes that an answer appears in a passage, but not wh
 - **Research CLI:** `aru-source-registry grant|check|revoke|verify|anchor|verify-anchor`.
 
 **Trust boundary:** this is single-operator, local research infrastructure. The owner header is not authenticated independently of the shared API bearer key. A checkpoint cannot protect newer, unanchored events. No enterprise identity verification, encrypted-at-rest metadata, multi-tenant isolation, or public hosting is claimed. Real human consent and source ownership must be established through an external process.
+
+
+## Selective Risk Gate — calibrated abstention with independent source evidence (research alpha)
+
+**New independent engineering branch:** [SELECTIVE_RISK_GATE.md](SELECTIVE_RISK_GATE.md) documents a risk-aware release policy that addresses a limitation of source citations: a verified source span can still be the wrong answer.
+
+`selective_risk_gate.py` evaluates independently labeled calibration examples, computes **exact one-sided binomial upper bounds**, and applies **Bonferroni simultaneous correction** across predeclared score thresholds and trusted task groups. It chooses the widest-coverage threshold only when every group and the aggregate satisfy a specified error target with sufficient support. Otherwise it **abstains**. The policy is HMAC-signed, bound to an immutable model revision and rubric, and combined with independent SHA-256 source-offset verification. `risk_qa_adapter.py` connects the policy to the existing specialized extractive QA model's raw logit score.
+
+`aru-risk` provides `fit`, `verify`, and `check` commands. `selective_risk_validation.py` runs reproducible known-truth Monte Carlo falsification, and dedicated tests exercise tampering, domain regressions, missing groups, insufficient support, model mismatch and source-proof failures.
+
+**No production reliability guarantee is claimed.** The confidence interpretation requires IID representative calibration and future tasks, predeclared thresholds/groups, correct independent labels, fixed model and rubric, and trusted group assignment. The system does not correct a wrong source, prevent distribution shift, or automatically authorize rollout. Its value is in **measuring and exposing uncertainty before displaying an answer**.
