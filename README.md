@@ -266,3 +266,26 @@ python3 evidence_gateway.py report --db experiment-data/gateway.db \
 ```
 
 The service enforces API-key authentication, an explicit research opt-in header, strict schema allowlists that reject raw prompt fields, unique decision IDs, idempotent retries, label-to-decision references, and tamper-detection checks. Events are append-only at the API level; SQLite administrators and anyone holding the HMAC key can still alter or delete storage. An external trusted digest anchor, database backups, retention/deletion controls, authenticated user consent, and operational security are required before using real customer data. **Do not expose this HTTP server to the public internet.**
+
+
+## Architecture: a decision can carry its evidence
+
+```mermaid
+flowchart LR
+  A["Local LLM / External agent"] --> B["Prospective route decision"]
+  B --> C["Consent-gated loopback API"]
+  C --> D["SQLite event log + HMAC chain"]
+  A --> E["Independent grader / human gold"]
+  E --> C
+  D --> F["IPS / SNIPS / cross-fitted DR"]
+  F --> G["Full-information audit (when available)"]
+  F --> H["Domain regression & overlap checks"]
+  G --> H
+  H --> I["HTML Evidence Dashboard"]
+  I --> J["HMAC-attested Evidence Passport"]
+  J --> K{"Human review"}
+  K -->|Further validation required| L["Prospective controlled trial"]
+  K -->|Evidence inadequate| M["Stop / investigate"]
+```
+
+The diagram shows research and proposed review flow, **not automatic production deployment**. No module can prove its own scientific claims merely by generating a dashboard or HMAC signature. Evidence must come from real task outcomes and independent assessment.
