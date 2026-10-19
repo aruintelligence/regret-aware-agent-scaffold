@@ -58,3 +58,65 @@ The warm controller predicts its own proxy score more closely on these fixtures 
 The evaluator and specialists are hand-authored. No ground-truth outcome or held-out real task is available here. Better calibration to this evaluator can coexist with worse real-world performance. A stronger next experiment would define externally graded tasks and compare this planner against a fixed policy with matched prompts, budgets, and independently specified success criteria.
 
 MIT licensed; see [LICENSE](LICENSE). Project concepts relate to the [Divine Whisper lineage](https://github.com/aruintelligence/divine-whisper-ecosystem) and Inward Physics™ research.
+
+
+## Decision Evidence Lab (experimental, opt-in)
+
+The **ĀRU Decision Evidence Lab** adds a measurable research workflow without changing the default scaffold. It is a **routing experiment**, not a deployed LLM, a verified improvement in task performance, or evidence of AGI. It logs the probability of each selected specialist route, accepts **separately graded** outcomes, compares candidate routing policies with inverse-propensity weighting, and generates a polished offline HTML dashboard.
+
+**Quick start: reproducible synthetic demonstration**
+
+```bash
+python3 experiment_cli.py demo --out-dir demo-report --n 900 --seed 7
+# Open demo-report/index.html locally
+python3 -m unittest discover -s tests -v
+```
+
+The synthetic generator intentionally assigns different success probabilities to three scripted routes. The results **only verify the evaluation pipeline**. The report prominently identifies synthetic data and *always* blocks rollout, even if the candidate appears superior.
+
+**Actual decision logging (no fabricated outcome labels)**
+
+```bash
+# Create prompts.txt yourself, with one non-sensitive task per line.
+python3 experiment_cli.py collect --prompts prompts.txt --decisions experiment-data/decisions.jsonl --epsilon 0.25 --seed 7
+
+# Independently evaluate a completed route with a preregistered rubric.
+# Replace DECISION_ID with the ID printed by collect.
+python3 experiment_cli.py label \
+  --decisions experiment-data/decisions.jsonl \
+  --labels experiment-data/labels.jsonl \
+  --decision-id DECISION_ID --reward 0.8 \
+  --grader external-evaluator-1 --rubric-id rubric-v1 \
+  --source-kind external
+
+python3 experiment_cli.py evaluate \
+  --decisions experiment-data/decisions.jsonl \
+  --labels experiment-data/labels.jsonl \
+  --baseline-policy greedy --candidate-policy shortest \
+  --report-json experiment-data/report.json \
+  --report-html experiment-data/index.html
+```
+
+The `collect` command uses an opt-in `ExperimentRuntime` with **one specialist route per task and no retries**. The original `MasterAgentRuntime` remains unchanged. This matters: assigning a final outcome to one action would be misleading if a later retry changed the result. The logged action is chosen with epsilon-greedy randomization, and the stored propensity is validated against the logged candidate set. No raw prompt, name, or user ID is written to the decision log. Task signatures and routes may still reveal information; use non-sensitive inputs and appropriate data retention policies.
+
+**What is estimated**
+
+- **IPS:** mean of externally graded rewards weighted by inverse logged action probability; may exceed the reward range in finite samples.
+- **SNIPS:** self-normalized IPS estimate; more stable in some cases but generally biased in finite samples.
+- **ESS:** effective sample size, warning of weak support even when the log is large.
+- **Paired bootstrap difference:** the candidate minus baseline SNIPS on the *same resampled tasks*. The percentile interval is exploratory and assumes independent observations.
+- **Conservative human-review screen:** checks sample size, complete labels, overlap, ESS, weight clipping, label provenance, and whether the exploratory lower interval exceeds a specified uplift. **It never authorizes automatic policy rollout.**
+
+Available deterministic candidate policies are `greedy` (original highest-score route), `shortest` (fewest nodes), and `evidence_first` (first route containing the evidence node, otherwise greedy). The baseline and candidate policies must be chosen *before* collecting outcomes to avoid selection bias. This implementation does not learn a new production policy from its own internal quality score.
+
+**Scientific and engineering limits**
+
+1. Specialist nodes are scripted placeholders. Their internally generated quality metrics are **not** valid external labels. External graders must use a fixed rubric and ideally be blind to the route chosen.
+2. The logging policy can adapt as memory changes. Standard independent-task bootstrap intervals are not automatically valid for adaptive data, repeated tasks, correlated users, or delayed rewards. A preregistered prospective experiment with cluster-aware or sequential inference is needed for consequential claims.
+3. Self-attested external labels are not cryptographically authenticated. JSONL is a **single-process research log**, not a transactional or tamper-proof enterprise ledger. It requires authorization, privacy review, secure storage, provenance, and independent audit before production use.
+4. The report measures policy value on observed task contexts only. It cannot establish improvements on new tasks, changes in distribution, or arbitrary real-world outcomes.
+5. The review gate is an advisory screening tool, not a causal proof, regulatory certification, or authorization to deploy.
+
+**Commercialization path:** integrate an actual task executor and independent grader, preregister external benchmark rubrics, randomize policy assignments under a fixed task budget, add authenticated append-only event storage, validate on held-out customers/tasks, and provide governance/rollback before selling an enterprise decision-assurance product.
+
+The GitHub Actions workflow tests Python 3.9 and 3.12, runs the existing internal benchmark, generates a synthetic evidence report, and publishes that report as a workflow artifact. No external Python dependencies are required.
