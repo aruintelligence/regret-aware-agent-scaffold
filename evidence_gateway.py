@@ -119,8 +119,8 @@ def make_handler(db_path, api_key, hmac_key):
 
 
 def make_server(db_path, api_key, hmac_key, *, host="127.0.0.1", port=8765):
-    if host not in ("127.0.0.1", "::1"):
-        raise ValueError("gateway must bind only to loopback")
+    if host != "127.0.0.1":
+        raise ValueError("research gateway currently supports IPv4 loopback only")
     return ThreadingHTTPServer((host, port), make_handler(db_path, api_key, hmac_key))
 
 
