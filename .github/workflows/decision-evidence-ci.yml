@@ -30,6 +30,7 @@ jobs:
       - name: Verify installable CLI distribution
         run: |
           python -m pip install --no-deps --no-build-isolation .
+          cd /tmp
           aru-evidence --help > /dev/null
           aru-gateway --help > /dev/null
           aru-squad --help > /dev/null
