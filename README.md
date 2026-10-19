@@ -455,3 +455,39 @@ The real-model matched benchmark now reports **raw F1 vs source-gated F1, answer
 ### An important negative result from the real model
 
 The completed matched 40-question follow-up (offset 40–79) found **direct-prompt mean F1 23.53%** and **grounded-prompt mean F1 21.50%**, a **−2.03 percentage-point** difference (exploratory article-cluster interval **−5.75 to +1.75 points**). Thus the restrictive prompt did **not** demonstrate a quality improvement. ĀRU records this negative evidence rather than claiming the initial unbalanced-arm advantage generalizes.
+
+
+### Local proof-carrying answer HTTP endpoint
+
+The genuine open-weight model server also exposes **`POST /v1/grounded/answers`** on **127.0.0.1 only**. It accepts JSON with `model`, `context`, `question` and optional `max_tokens`, and requires the header `X-ARU-Consent: research-opt-in`. It runs the fixed extractive prompt and returns either an independently verifiable source-span certificate or a transparent abstention. Unknown fields, unsupported content types, oversized requests and absent consent are rejected. The response never includes the entire source passage or unsupported raw model text.
+
+```python
+import json, urllib.request
+from grounding_contract import verify_grounding
+
+passage = "The telescope was in Oregon."
+payload = {
+    "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+    "context": passage,
+    "question": "Where was the telescope?",
+    "max_tokens": 48,
+}
+request = urllib.request.Request(
+    "http://127.0.0.1:1234/v1/grounded/answers",
+    data=json.dumps(payload).encode("utf-8"),
+    headers={
+        "Content-Type": "application/json",
+        "X-ARU-Consent": "research-opt-in",
+    },
+    method="POST",
+)
+with urllib.request.urlopen(request, timeout=90) as response:
+    result = json.loads(response.read())
+if result["accepted"]:
+    assert verify_grounding(result["proof"], passage)
+    print("Source-backed answer:", result["answer"])
+else:
+    print("Abstained:", result["proof"]["reason"])
+```
+
+This is a **local research endpoint, not an authenticated production service**. The consent header is a caller acknowledgement, not verified user consent. Never expose the model server to the public internet or send private customer data through this prototype. A valid source substring can still be factually wrong or irrelevant.
