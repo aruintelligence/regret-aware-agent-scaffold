@@ -169,7 +169,9 @@ def verify_chain(db_path, *, hmac_key=None):
         ).fetchall()
     previous = GENESIS
     errors = []
-    for seq, kind, event_id, created, canonical, prev, digest in rows:
+    for expected_sequence, (seq, kind, event_id, created, canonical, prev, digest) in enumerate(rows, 1):
+        if seq != expected_sequence:
+            errors.append("missing or reordered sequence at " + str(expected_sequence))
         if prev != previous:
             errors.append("broken predecessor at sequence " + str(seq))
         expected = _event_hash(prev, kind, event_id, created, canonical, hmac_key)
