@@ -75,6 +75,9 @@ def validate_decision(row: dict) -> None:
         identifier = action_id(candidate.get("route"))
         if candidate.get("action") != identifier:
             raise ValueError("candidate action does not match route")
+        score = candidate.get("predicted_score")
+        if isinstance(score, bool) or not isinstance(score, (float, int)) or not math.isfinite(score):
+            raise ValueError("candidate predicted_score must be finite")
         ids.append(identifier)
     if len(set(ids)) != len(ids):
         raise ValueError("duplicate candidate routes")
@@ -85,6 +88,8 @@ def validate_decision(row: dict) -> None:
     if not isinstance(propensity, (int, float)) or isinstance(propensity, bool) or not math.isfinite(propensity) or not 0 < propensity <= 1:
         raise ValueError("propensity must be finite and in (0,1]")
     if policy == "epsilon_greedy":
+        if candidates[0]["predicted_score"] < max(candidate["predicted_score"] for candidate in candidates):
+            raise ValueError("epsilon-greedy candidate order must start with highest score")
         epsilon = row.get("epsilon")
         if not isinstance(epsilon, (int, float)) or isinstance(epsilon, bool) or not math.isfinite(epsilon) or not 0 < epsilon <= 1:
             raise ValueError("epsilon must be in (0,1]")
@@ -119,7 +124,8 @@ def choose_policy_action(row: dict, policy: str) -> str:
     """Deterministic policies defined entirely from pre-decision candidates."""
     candidates = row["candidates"]
     if policy == "greedy":
-        return candidates[0]["action"]
+        # Choose highest predicted score, preserving first-in-list tie order.
+        return max(candidates, key=lambda candidate: candidate["predicted_score"])["action"]
     if policy == "shortest":
         winner = min(candidates, key=lambda c: (
             len(c["route"]), -float(c.get("predicted_score", 0)),
@@ -127,10 +133,11 @@ def choose_policy_action(row: dict, policy: str) -> str:
         ))
         return winner["action"]
     if policy == "evidence_first":
-        for candidate in candidates:
-            if "truth_evidence_node" in candidate["route"]:
-                return candidate["action"]
-        return candidates[0]["action"]
+        evidence_routes = [candidate for candidate in candidates
+                           if "truth_evidence_node" in candidate["route"]]
+        if evidence_routes:
+            return max(evidence_routes, key=lambda candidate: candidate["predicted_score"])["action"]
+        return choose_policy_action(row, "greedy")
     raise ValueError(f"unknown policy: {policy}")
 
 
