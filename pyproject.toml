@@ -29,6 +29,7 @@ dependencies = []
 real-model = ["torch==2.5.1", "transformers==4.48.3", "safetensors==0.5.3"]
 
 [project.scripts]
+aru-risk = "selective_risk_cli:main"
 aru-evidence = "experiment_cli:main"
 aru-gateway = "evidence_gateway:main"
 aru-squad = "squad_benchmark:main"
@@ -68,6 +69,9 @@ py-modules = [
   "llm_squad_benchmark",
   "llm_paired_audit",
   "grounding_contract",
+  "selective_risk_gate",
+  "selective_risk_cli",
+  "risk_qa_adapter",
   "extractive_qa_engine",
   "qa_proof_benchmark",
   "qa_local_server",
