@@ -83,5 +83,3 @@ jobs:
             real-watch-report/audit/report.json
           if-no-files-found: warn
           retention-days: 14
-          if-no-files-found: warn
-          retention-days: 14

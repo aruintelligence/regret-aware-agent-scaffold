@@ -544,3 +544,5 @@ jobs:
             specialized-qa-report/health.json
             specialized-qa-report/evaluation/index.html
             specialized-qa-report/evaluation/report.json
+          if-no-files-found: warn
+          retention-days: 14
