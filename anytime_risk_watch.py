@@ -209,6 +209,12 @@ def gate_with_risk_watch(policy, *, policy_key, watch_report, watch_key,
     if (watch_report.get("model_revision") != model_revision
             or watch_report.get("rubric_id") != rubric_id):
         return {**deny, "reason": "watch_model_or_rubric_mismatch"}
+    # A valid monitoring signature does not make a different risk target
+    # interchangeable with the one certified by static calibration.
+    if (not isinstance(policy, dict)
+            or watch_report.get("target_error") != policy.get("target_error")
+            or watch_report.get("groups") != policy.get("groups")):
+        return {**deny, "reason": "watch_calibration_scope_mismatch"}
     if group not in watch_report.get("groups", []):
         return {**deny, "reason": "unmonitored_group"}
     # Require an independently expected digest of the COMPLETE current

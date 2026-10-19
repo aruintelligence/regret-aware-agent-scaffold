@@ -611,3 +611,15 @@ The opt-in [ANYTIME_RISK_WATCH.md](ANYTIME_RISK_WATCH.md) research module extend
 `aru-watch observe` processes local ordered JSONL outcome records and signs an aggregate report; `aru-watch verify` validates the HMAC. The new `gate_with_risk_watch` requires both the static signed calibration and a separately signed watch report, a current independently expected outcome-stream digest, minimum group observations, an absence of alarms, and an independently verified source certificate. A stale signed report is rejected rather than silently replayed.
 
 The monitor is **not** automatically scheduled or deployed. An alarm requires human investigation; no alarm is not evidence of correctness. The sequential interpretation depends on complete prospective outcomes, predeclared groups and bets, correct labels, and a valid conditional null. No customer data or raw prompts are stored in the signed summary.
+
+### Real-model error stream and controlled deterioration audit
+
+The [fixed real-model watch protocol](REAL_MODEL_WATCH_PROTOCOL.md) reserves public SQuAD questions 200–319 for a specialized pretrained QA model. Every selected question is scored **after inference** against published human answers. Failed calls and abstentions remain in the error stream. The report measures the actual observed alarm, verified source coverage and answer accuracy; separate stress replays flip labels after predeclared onset points and measure alarm delay or missed detection. Those replays are **synthetic deterioration**, not evidence that a deployed model changed. A seeded conditional-null simulation checks software behavior but cannot estimate the real workflow's false-alarm rate.
+
+```bash
+# After downloading the pinned official SQuAD dev JSON and installing .[real-model]:
+aru-watch-real-audit --dataset dev-v1.1.json --out-dir watch-audit \
+  --acknowledge-model-calls
+```
+
+PR #7's real-model CI job records the model revision, protocol hash, ordered binary outcome stream and aggregate audit. The report is unsigned and uses a public development dataset. A signed, independently operated current ledger, separate static calibration and externally audited grading are still needed before evaluating a customer workflow. The dual-evidence gate now rejects signed monitoring whose error target or declared group scope differs from the signed calibration policy.

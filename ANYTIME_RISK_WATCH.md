@@ -42,6 +42,7 @@ For `J` predeclared groups, monitor each group and the aggregate with `alpha_sli
 - `gate_with_risk_watch` refuses missing or invalid signatures, model/rubric mismatches, unmonitored groups, a degradation alarm, or insufficient group observations.
 - **Replay protection:** the caller must supply `expected_outcomes_sha256` from a separately controlled, current and complete monitoring ledger. An older signed report with a different digest is rejected.
 - The existing signed static selective-risk calibration and independently verified source-span certificate must still pass. **No alarm is not a deployment approval.**
+- Watch and calibration must declare the same error target and ordered group scope; a looser signed watch cannot stand in for a stricter signed calibration.
 
 The caller must obtain the current digest from a trusted source; supplying the digest copied from the report defeats replay protection. A compromised signing key, incomplete labels, selective reporting, or a malicious monitoring pipeline can still undermine the system.
 
@@ -78,3 +79,5 @@ Unit tests cover all-correct streams, sustained failures, subgroup-only deterior
 The sequential interpretation requires a prospective, predeclared inclusion rule; complete independently graded outcomes; trusted group assignment; and the conditional null. It is invalidated by missing difficult outcomes, selective feedback, retrospective cherry-picking, inconsistent group assignment, or assumptions broken by clustered data. When feedback is delayed, record and handle that delay explicitly rather than silently excluding unresolved outcomes.
 
 **Research goal:** combine static risk calibration, real-time degradation evidence, and source verification into a defensible human-reviewed AI assurance workflow. Production readiness, commercial value, safety, and customer performance remain unproven.
+
+The [preregistered public real-model audit](REAL_MODEL_WATCH_PROTOCOL.md) connects this monitor to actual QA calls scored against published human answers. Its injected post-onset errors and simulated null streams are explicitly synthetic. The unsigned audit is distinct from the signed, independently anchored evidence required for the release gate.

@@ -48,6 +48,7 @@ jobs:
           aru-qa-serve --help > /dev/null
           aru-risk --help > /dev/null
           aru-watch --help > /dev/null
+          aru-watch-real-audit --help > /dev/null
           aru-source-registry --help > /dev/null
       - name: Verify prospective pilot sample-size planner
         run: |
@@ -543,5 +544,77 @@ jobs:
             specialized-qa-report/health.json
             specialized-qa-report/evaluation/index.html
             specialized-qa-report/evaluation/report.json
+
+  real_watch_audit:
+    name: Real model · public human-gold prospective watch audit
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 7
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real pretrained CPU model runtime
+        run: |
+          python -m pip install --disable-pip-version-check torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check transformers==4.48.3 safetensors==0.5.3
+      - name: Fetch pinned, human-annotated public dataset
+        run: |
+          mkdir -p benchmark-data real-watch-report
+          curl --fail --location --show-error --silent --retry 3 --max-time 120 https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json --output benchmark-data/dev-v1.1.json
+          echo "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9  benchmark-data/dev-v1.1.json" | sha256sum --check
+          sha256sum REAL_MODEL_WATCH_PROTOCOL.md > real-watch-report/protocol.sha256
+      - name: Collect all real-model calls, score human gold, stress watch
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+          TOKENIZERS_PARALLELISM: 'false'
+        run: |
+          python real_model_watch_audit.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir real-watch-report/audit \
+            --qa-model distilbert/distilbert-base-cased-distilled-squad \
+            --acknowledge-model-calls
+      - name: Recompute ordered evidence and check strict claim boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from anytime_risk_watch import watch_risk_stream
+          root = Path('real-watch-report/audit')
+          report = json.loads((root / 'report.json').read_text())
+          rows = [json.loads(line) for line in (root / 'outcomes.jsonl').read_text().splitlines()]
+          assert report['kind'] == 'aru_real_model_anytime_watch_public_human_gold_audit'
+          assert report['offset'] == 200 and report['requested'] == report['observed'] == len(rows) == 120
+          assert report['dataset_sha256'] == '95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9'
+          assert report['model_revision'] and report['verified_source_certificates'] <= 120
+          assert report['model_call_failures_counted_as_errors'] == 0
+          assert report['observed_outcomes_kind'].startswith('actual_model_calls')
+          assert report['stress_outcomes_kind'].startswith('synthetic_')
+          assert report['automatic_rollout_permitted'] is False
+          independently_recomputed = watch_risk_stream(
+              rows, groups=report['groups'], model_revision=report['model_revision'],
+              rubric_id=report['rubric_id'], target_error=report['target_error'],
+              alpha=report['familywise_alpha'],
+          )
+          assert independently_recomputed == report['observed_model_watch']
+          assert len(report['injected_deterioration']) == 6
+          print('Observed model alarm:', report['observed_model_watch']['degradation_alarm'])
+          print('Observed source certificates:', report['verified_source_certificates'])
+          print('Synthetic drift results:', report['injected_deterioration'])
+          print('No customer or production deterioration claim.')
+          PY
+      - name: Retain public-benchmark evidence without raw passages or answers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aru-real-model-anytime-watch-audit
+          path: |
+            real-watch-report/protocol.sha256
+            real-watch-report/audit/outcomes.jsonl
+            real-watch-report/audit/report.json
+          if-no-files-found: warn
+          retention-days: 14
           if-no-files-found: warn
           retention-days: 14

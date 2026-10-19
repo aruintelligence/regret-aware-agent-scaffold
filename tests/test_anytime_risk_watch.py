@@ -147,6 +147,25 @@ class AnytimeRiskWatchTests(unittest.TestCase):
                 result = gate_with_risk_watch(**{**kwargs, **update})
                 self.assertFalse(result["accepted"])
                 self.assertEqual(result["reason"], reason)
+        # Both reports may be genuinely signed, yet cover different claims.
+        loose = sign_watch_report(watch_risk_stream(
+            outcomes(), groups=["general"], model_revision="fixed-qa-sha",
+            rubric_id="independent-grader-v1", target_error=0.9,
+        ), key=WATCH_KEY)
+        result = gate_with_risk_watch(**{
+            **kwargs, "watch_report": loose,
+            "expected_outcomes_sha256": loose["ordered_outcomes_sha256"],
+        })
+        self.assertEqual(result["reason"], "watch_calibration_scope_mismatch")
+        other_scope = sign_watch_report(watch_risk_stream(
+            outcomes(), groups=["general", "technical"], model_revision="fixed-qa-sha",
+            rubric_id="independent-grader-v1", target_error=0.1,
+        ), key=WATCH_KEY)
+        result = gate_with_risk_watch(**{
+            **kwargs, "watch_report": other_scope,
+            "expected_outcomes_sha256": other_scope["ordered_outcomes_sha256"],
+        })
+        self.assertEqual(result["reason"], "watch_calibration_scope_mismatch")
         alarm = sign_watch_report(watch(outcomes(40, error=True)), key=WATCH_KEY)
         blocked = gate_with_risk_watch(**{
             **kwargs, "watch_report": alarm,
