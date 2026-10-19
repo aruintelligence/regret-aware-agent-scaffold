@@ -257,6 +257,12 @@ python3 evidence_gateway.py verify --db experiment-data/gateway.db
 python3 evidence_gateway.py export --db experiment-data/gateway.db \
   --decisions experiment-data/gateway-decisions.jsonl \
   --labels experiment-data/gateway-labels.jsonl
+
+# One command to export, evaluate, render, and HMAC-attest an evidence passport:
+python3 evidence_gateway.py report --db experiment-data/gateway.db \
+  --out-dir experiment-data/gateway-passport \
+  --baseline-policy greedy --candidate-policy shortest --replicates 300
+# Open experiment-data/gateway-passport/index.html
 ```
 
 The service enforces API-key authentication, an explicit research opt-in header, strict schema allowlists that reject raw prompt fields, unique decision IDs, idempotent retries, label-to-decision references, and tamper-detection checks. Events are append-only at the API level; SQLite administrators and anyone holding the HMAC key can still alter or delete storage. An external trusted digest anchor, database backups, retention/deletion controls, authenticated user consent, and operational security are required before using real customer data. **Do not expose this HTTP server to the public internet.**
