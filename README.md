@@ -120,3 +120,28 @@ Available deterministic candidate policies are `greedy` (original highest-score 
 **Commercialization path:** integrate an actual task executor and independent grader, preregister external benchmark rubrics, randomize policy assignments under a fixed task budget, add authenticated append-only event storage, validate on held-out customers/tasks, and provide governance/rollback before selling an enterprise decision-assurance product.
 
 The GitHub Actions workflow tests Python 3.9 and 3.12, runs the existing internal benchmark, generates a synthetic evidence report, and publishes that report as a workflow artifact. No external Python dependencies are required.
+
+
+### Advanced diagnostics and evidence attestation
+
+The report also includes an **out-of-fold doubly robust (DR) diagnostic**. A shrinkage reward model is trained on other folds and predicts outcomes using the pre-decision task signature and route. The model is deliberately simple and is not independently validated; the DR estimate is a second estimator, **not a second experiment**. Domain-level segment diagnostics flag an observed negative policy difference only when both policies have minimum effective support. These are investigation signals, not demographic fairness claims or confirmatory tests.
+
+For an auditable research handoff, create a checksum manifest over the decision log, outcome labels, and JSON report:
+
+```bash
+python3 experiment_cli.py attest \
+  --decisions experiment-data/decisions.jsonl \
+  --labels experiment-data/labels.jsonl \
+  --report-json experiment-data/report.json \
+  --manifest experiment-data/attestation.json
+
+python3 experiment_cli.py verify \
+  --decisions experiment-data/decisions.jsonl \
+  --labels experiment-data/labels.jsonl \
+  --report-json experiment-data/report.json \
+  --manifest experiment-data/attestation.json
+```
+
+For **HMAC authentication**, securely provision an environment variable named `ARU_EVIDENCE_HMAC_KEY` with at least 16 bytes of secret material and add `--hmac-key-env ARU_EVIDENCE_HMAC_KEY` to both commands. Do not commit or share the secret. An HMAC-authenticated manifest can detect modifications when the key remains private; it does **not** prove the underlying labels are truthful, stop someone deleting the files, or make JSONL immutable. Store the attestation outside the experimental data store to establish a separate trusted anchor.
+
+**Commercial safety principle:** a policy can show a positive overall estimate while performing worse in a specific task domain. The human-review screen blocks advancement when a sufficiently supported domain exhibits a material observed decline. Even a passed screen cannot trigger automatic rollout.
