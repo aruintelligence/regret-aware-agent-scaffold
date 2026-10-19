@@ -119,3 +119,49 @@ def verify_grounding(proof, context):
         and proof.get("answer_sha256") == _sha256(extracted)
         and _word_bounded(context, start, end)
     )
+
+
+def main():
+    """Local-only CLI; neither passage nor model answer is sent to any API."""
+    import argparse
+    import json
+    import os
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    certify = sub.add_parser("certify", help="Certify answer is a contiguous source span or abstain")
+    certify.add_argument("--context-file", required=True)
+    certify.add_argument("--answer-file", required=True)
+    certify.add_argument("--out", required=True)
+    certify.add_argument("--model-revision")
+    verify = sub.add_parser("verify", help="Verify an existing certificate against source text")
+    verify.add_argument("--context-file", required=True)
+    verify.add_argument("--proof-file", required=True)
+    args = parser.parse_args()
+    context = Path(args.context_file).read_text(encoding="utf-8")
+    if args.command == "certify":
+        answer = Path(args.answer_file).read_text(encoding="utf-8")
+        proof = ground_answer(answer, context, model_revision=args.model_revision)
+        target = Path(args.out)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("x", encoding="utf-8") as handle:
+            json.dump(proof, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        if os.name == "posix":
+            os.chmod(target, 0o600)
+        print(json.dumps({
+            "accepted": proof["accepted"],
+            "reason": proof["reason"],
+            "proof_path": str(target),
+        }))
+    else:
+        proof = json.loads(Path(args.proof_file).read_text(encoding="utf-8"))
+        valid = verify_grounding(proof, context)
+        print(json.dumps({"verified": valid}))
+        if not valid:
+            raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
