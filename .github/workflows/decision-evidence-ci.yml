@@ -74,3 +74,51 @@ jobs:
           name: aru-synthetic-evidence-dashboard
           path: demo-report/
           retention-days: 14
+
+  human_gold:
+    name: Human-annotated SQuAD sentence retrieval
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch independent Stanford SQuAD dev dataset
+        run: |
+          mkdir -p benchmark-data
+          curl --fail --location --show-error --silent --retry 3 --max-time 120 https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json --output benchmark-data/dev-v1.1.json
+          sha256sum benchmark-data/dev-v1.1.json
+          test "$(wc -c < benchmark-data/dev-v1.1.json)" -gt 1000000
+      - name: Run external gold-label experiment
+        run: |
+          python squad_benchmark.py --dataset benchmark-data/dev-v1.1.json --out-dir benchmark-report --limit 2000 --seed 20261018 --replicates 400
+      - name: Assert benchmark scope and inspect direct oracle
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("benchmark-report/report.json").read_text())
+          oracle = report["external_benchmark"]
+          assert oracle["n_evaluated"] == 2000
+          assert report["label_source_counts"] == {"external": 2000}
+          assert not report["review_gate"]["automatic_rollout_permitted"]
+          assert abs(oracle["difference"] - (oracle["candidate_accuracy"] - oracle["baseline_accuracy"])) < 1e-12
+          print("HUMAN-ANNOTATED SENTENCE RETRIEVAL (not LLM evaluation)")
+          print("Baseline accuracy:", oracle["baseline_accuracy"])
+          print("Candidate accuracy:", oracle["candidate_accuracy"])
+          print("Direct difference:", oracle["difference"])
+          print("Paired oracle interval:", oracle["paired_question_interval"])
+          print("OPE SNIPS difference:", report["paired_difference"]["snips_difference"])
+          print("Dataset SHA256:", oracle["dataset_sha256"])
+          PY
+      - name: Upload benchmark reports (not the raw dataset)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aru-human-gold-evidence
+          path: |
+            benchmark-report/index.html
+            benchmark-report/report.json
+            benchmark-report/oracle.json
+          retention-days: 14
