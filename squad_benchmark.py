@@ -19,6 +19,7 @@ from pathlib import Path
 
 from evidence_dashboard import save_dashboard
 from distribution_robustness import break_even_topic_shift, topic_mix_stress_table
+from paired_inference import exact_mcnemar
 from evidence_lab import evaluate_experiment
 from route_experiments import action_id, append_jsonl, validate_decision
 from squad_sentence_retrieval import (
@@ -179,6 +180,7 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
         "both_correct": both_correct,
         "baseline_only": baseline_only,
         "candidate_only": candidate_only,
+        "exact_mcnemar_descriptive": exact_mcnemar(baseline_only, candidate_only),
         "both_wrong": both_wrong,
         "logged_action_counts": {"baseline": action_counts[0], "candidate": action_counts[1]},
         "mean_latency_ms": {"baseline": route_time[0] * 1000 / n,
@@ -224,6 +226,9 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
     )
     report["limitations"].append(
         "Article/paragraph cluster bootstrap intervals account for within-cluster correlation only approximately; they are exploratory, not confirmatory."
+    )
+    report["limitations"].append(
+        "Exact McNemar discordance test assumes independent question pairs; repeated questions within SQuAD paragraphs/articles violate this assumption. Its p-value is descriptive, not confirmatory."
     )
     report["limitations"].append(
         "Adversarial topic-mix stress tests reweight only observed articles while assuming their conditional success rates remain fixed; they are not statistical confidence bounds."
