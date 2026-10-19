@@ -145,3 +145,29 @@ python3 experiment_cli.py verify \
 For **HMAC authentication**, securely provision an environment variable named `ARU_EVIDENCE_HMAC_KEY` with at least 16 bytes of secret material and add `--hmac-key-env ARU_EVIDENCE_HMAC_KEY` to both commands. Do not commit or share the secret. An HMAC-authenticated manifest can detect modifications when the key remains private; it does **not** prove the underlying labels are truthful, stop someone deleting the files, or make JSONL immutable. Store the attestation outside the experimental data store to establish a separate trusted anchor.
 
 **Commercial safety principle:** a policy can show a positive overall estimate while performing worse in a specific task domain. The human-review screen blocks advancement when a sufficiently supported domain exhibits a material observed decline. Even a passed screen cannot trigger automatic rollout.
+
+
+### Instrument an external agent (vendor-neutral adapter)
+
+A real AI orchestration system can call the dependency-free `external_adapter.log_instrumented_decision` **at the moment it makes a prospective randomized decision**. This creates the same schema used by the evaluator, without importing the scripted scaffold runtime:
+
+```python
+from external_adapter import log_instrumented_decision
+
+# These probabilities must come from the ACTUAL randomized controller.
+# Here, an external controller has already selected the second route.
+event = log_instrumented_decision(
+    "experiment-data/decisions.jsonl",
+    task_signature="research|public-data",
+    candidate_routes=[
+        ["research_node", "truth_evidence_node"],
+        ["coherence_node"],
+    ],
+    selected_route=["coherence_node"],
+    selection_probabilities=[0.8, 0.2],
+    predicted_scores=[0.8, 0.5],
+)
+print(event["decision_id"])  # Join an independent outcome later.
+```
+
+The adapter validates full-support categorical probabilities, their sum, candidate identity, and the logged propensity. **It cannot verify that the external system actually used those probabilities**. Never infer or invent propensities retrospectively, and do not submit tasks where randomized exploration would create unacceptable risk. The adapter is not a production API: there is no authentication, concurrency control, encryption, consent workflow, or verified executor integration. Those remain explicit engineering requirements.
