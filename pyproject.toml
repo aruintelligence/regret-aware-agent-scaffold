@@ -32,6 +32,7 @@ real-model = ["torch==2.5.1", "transformers==4.48.3", "safetensors==0.5.3"]
 aru-risk = "selective_risk_cli:main"
 aru-watch = "anytime_risk_watch_cli:main"
 aru-watch-ledger = "watch_outcome_ledger_cli:main"
+aru-watch-prospective-audit = "prospective_ledger_audit:main"
 aru-watch-real-audit = "real_model_watch_audit:main"
 aru-watch-change-point-audit = "change_point_audit:main"
 aru-watch-calibrated-audit = "calibrated_change_audit:main"
@@ -84,6 +85,7 @@ py-modules = [
   "anytime_risk_watch_cli",
   "watch_outcome_ledger",
   "watch_outcome_ledger_cli",
+  "prospective_ledger_audit",
   "real_model_watch_audit",
   "change_point_watch",
   "change_point_audit",

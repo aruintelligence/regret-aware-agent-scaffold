@@ -49,6 +49,7 @@ jobs:
           aru-risk --help > /dev/null
           aru-watch --help > /dev/null
           aru-watch-ledger --help > /dev/null
+          aru-watch-prospective-audit --help > /dev/null
           aru-watch-real-audit --help > /dev/null
           aru-watch-change-point-audit --help > /dev/null
           aru-watch-calibrated-audit --help > /dev/null
