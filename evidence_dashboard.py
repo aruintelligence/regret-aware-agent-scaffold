@@ -73,6 +73,21 @@ def render_dashboard(report: dict) -> str:
             '<p class="sub">Negative article-level domains flagged: '
             + str(direct["negative_article_count"]) + '. This is sentence retrieval, not an LLM or general-agent test.</p></section>'
         )
+        stress_rows = "".join(
+            "<tr><td>" + f'{item["requested_tv_budget"]*100:.0f}%' + "</td>"
+            + "<td>" + f'{item["worst_case_uplift"]*100:+.2f} pp' + "</td>"
+            + "<td>" + f'{item["realized_tv"]*100:.1f}%' + "</td></tr>"
+            for item in direct.get("topic_mix_stress", [])
+        )
+        if stress_rows:
+            direct_panel += (
+                '<section class="panel"><div class="eyebrow">Adversarial robustness · observed topics only</div>'
+                '<h2>What if tomorrow’s tasks look different?</h2>'
+                '<p class="sub">Worst-case measured uplift when probability mass is moved from stronger to weaker observed articles within a total-variation budget.</p>'
+                '<table><thead><tr><th>Topic-mix shift budget</th><th>Worst-case uplift</th><th>Shift used</th></tr></thead>'
+                '<tbody>' + stress_rows + '</tbody></table>'
+                '<p class="sub">This is a finite reweighting stress test, not a confidence interval or guarantee on unseen domains.</p></section>'
+            )
     reasons = "".join(f"<li>{escape(reason)}</li>" for reason in gate["reasons"])
     limitations = "".join(f"<li>{escape(reason)}</li>" for reason in report["limitations"])
     source = ", ".join(f"{escape(str(k))}: {int(v)}" for k, v in report["label_source_counts"].items())
