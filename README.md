@@ -1,5 +1,11 @@
 # Regret-Aware Agent Scaffold
 
+> **ĀRU Decision Evidence Lab · Research release**
+>
+> **Independent human-gold benchmark:** on 2,000 questions from Stanford SQuAD v1.1, a question-aware sentence retriever selected the answer-containing sentence **82.1%** of the time versus **78.5%** for the lexical baseline (**+3.6 percentage points**). The exploratory article-cluster bootstrap interval was **+2.47 to +4.61 points**. One topic regressed, and the review gate blocked advancement. **This is sentence retrieval, not proof of better LLM reasoning or general intelligence.**
+>
+> **Evidence:** [Reproducible benchmark record](BENCHMARK_EVIDENCE.md) · [Commercialization blueprint](COMMERCIALIZATION.md) · [Decision Evidence Lab CI](https://github.com/aruintelligence/regret-aware-agent-scaffold/actions)
+
 A dependency-free Python **routing simulator** for studying how an agent controller can remember prior routes and calibrate predictions after each attempt. Created by Daniel Jacob Read IV and Shane Travis Horman (ĀRU Intelligence).
 
 This is a scaffold with scripted specialist nodes. It does not call an LLM, browse, solve arbitrary prompts, measure cognition, or validate real-world task success. Its “quality” and “confidence” are internal proxy values defined by the code.
