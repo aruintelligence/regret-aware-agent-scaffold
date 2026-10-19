@@ -365,3 +365,19 @@ aru-power --uplift 0.05 --discordance 0.25 \
 ```
 
 This is **planning math, not a validated forecast of success**. The normal approximation and simple cluster design effect are not suitable for adaptive bandits, SNIPS/DR estimation, sequential stopping, unequal clusters, or nonbinary outcomes. A real customer pilot should use an independent statistician, preregistered rubrics and sample-size assumptions, and appropriate design-specific simulation.
+
+
+## Prospective anytime-valid evidence (with conditional assumptions)
+
+`anytime_evidence.py` implements a **predeclared fixed-mixture e-process** for fully observed paired binary outcomes. Under the conditional null `E[candidate_success - baseline_success | past] <= 0`, the nonnegative mixture wealth is a supermartingale; Ville's inequality bounds the chance of ever crossing `1/alpha` by `alpha`. This can support planned repeated looks without ordinary fixed-sample p-value peeking **when its assumptions actually hold**.
+
+```bash
+# Provide a prospective, consented JSONL file containing only:
+# {"baseline":0,"candidate":1}
+# {"baseline":1,"candidate":1}
+# ...
+aru-anytime --pairs-jsonl prospective-pairs.jsonl \
+  --alpha 0.05 --acknowledge-design-assumptions
+```
+
+The tool refuses to run without explicit acknowledgement of the design assumptions and always blocks automatic rollout. It must **not** be used to retroactively claim significance on the SQuAD development benchmark or on selectively graded off-policy data. See [MATHEMATICAL_FOUNDATIONS.md](MATHEMATICAL_FOUNDATIONS.md) for a self-contained derivation and explicit limits of IPS, DR, McNemar, adversarial topic reweighting, prospective power, e-processes, and HMAC checkpoints.
