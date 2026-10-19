@@ -88,6 +88,8 @@ class SquadSentenceTests(unittest.TestCase):
             dashboard = (out / "index.html").read_text(encoding="utf-8")
             self.assertIn("Direct full-information audit", dashboard)
             self.assertIn("Human-gold sentence retrieval", dashboard)
+            self.assertIn("Adversarial robustness", dashboard)
+            self.assertEqual(len(report["external_benchmark"]["topic_mix_stress"]), 3)
             self.assertEqual(len((out / "decisions.benchmark.jsonl").read_text().splitlines()), 24)
             self.assertEqual(len((out / "labels.benchmark.jsonl").read_text().splitlines()), 24)
             self.assertIn("not LLM", report["external_benchmark"]["scope"])
