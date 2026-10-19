@@ -381,3 +381,33 @@ aru-anytime --pairs-jsonl prospective-pairs.jsonl \
 ```
 
 The tool refuses to run without explicit acknowledgement of the design assumptions and always blocks automatic rollout. It must **not** be used to retroactively claim significance on the SQuAD development benchmark or on selectively graded off-policy data. See [MATHEMATICAL_FOUNDATIONS.md](MATHEMATICAL_FOUNDATIONS.md) for a self-contained derivation and explicit limits of IPS, DR, McNemar, adversarial topic reweighting, prospective power, e-processes, and HMAC checkpoints.
+
+
+## Real open-weight model execution (public human-gold QA)
+
+The `hf_local_server.py` adapter now runs **actual pretrained language-model weights**, not a mock, on a loopback-only OpenAI-compatible endpoint. The opt-in benchmark connects the existing `llm_squad_benchmark.py` to that server and grades the resulting answers against independent human annotations from the public Stanford SQuAD v1.1 development split.
+
+The initial reproducible integration target is the small open-weight **HuggingFaceTB/SmolLM2-135M-Instruct** model, evaluated on **40 hash-selected public questions** with two prospectively randomized prompt strategies. This is intentionally a **small engineering smoke experiment**, not a statistically powered model comparison or proof of a performance gain. A 135M-parameter model may perform poorly on QA; failure is still a useful, measurable result.
+
+### Run locally (only after explicitly installing and downloading weights)
+
+```bash
+# In a virtual environment with Python 3.12:
+python3 -m pip install '.[real-model]'
+
+# Start a real local model; first run downloads public weights.
+aru-local-model --model HuggingFaceTB/SmolLM2-135M-Instruct \
+  --threads 2 --port 1234 --metadata-json model-provenance.json
+
+# In another terminal, after downloading official SQuAD dev JSON:
+aru-llm-squad --dataset dev-v1.1.json \
+  --out-dir real-model-report \
+  --model HuggingFaceTB/SmolLM2-135M-Instruct \
+  --endpoint http://127.0.0.1:1234/v1/chat/completions \
+  --limit 40 --seed 20261018 --max-tokens 48 \
+  --acknowledge-model-calls
+```
+
+The GitHub Actions job **Real open-weight LLM · public human-gold QA** performs this integration on the PR using a CPU-only PyTorch/Transformers backend. It verifies that a real model commit hash was loaded, 40 tasks were requested, outcome labels came from human-gold grading, and automatic policy rollout remains disabled. The CI artifact includes the model provenance and evidence dashboard, **not the model weights, raw passages, or prompts**.
+
+**Security and scientific limits:** the server accepts only loopback connections and uses deterministic greedy decoding; it is not an authenticated multi-tenant service. Public SQuAD text is sent only to the selected local server for inference; model weights are downloaded from their hosting provider. No remote inference API key is needed. The public development split is not an untouched hidden holdout. Real customer data, private documents, medical decisions, and autonomous production use are out of scope.
