@@ -310,3 +310,15 @@ aru-llm-squad --help
 ```
 
 The package is an **alpha research distribution**, not a hosted SaaS, production API, or PyPI release. Runtime modules use only the Python standard library; the optional packaging step requires setuptools. Do not install or expose the local HTTP gateway as a public service without a security review.
+
+
+## Premium research landing page (not yet deployed)
+
+A standalone, responsive product research page is included in `docs/index.html` with `docs/styles.css`. It presents the real human-gold result, negative-topic warning, technical architecture, and design-partner invitation without implying production certification.
+
+```bash
+python3 -m http.server 8000 --bind 127.0.0.1 --directory docs
+# Visit http://127.0.0.1:8000/ locally.
+```
+
+This page is committed as source code only; GitHub Pages, DNS, and any public deployment have **not** been activated. Review product claims, trademarks, ownership and commercial terms before publishing.
