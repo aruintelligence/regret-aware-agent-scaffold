@@ -8,7 +8,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from evidence_gateway import make_server
+from evidence_gateway import build_report_from_gateway, make_server
+from evidence_audit import verify_manifest
 from evidence_gateway_store import (
     EvidenceConflict, export_jsonl, record_event, verify_chain,
 )
@@ -75,6 +76,43 @@ class GatewayStoreTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 export_jsonl(db, str(Path(folder) / "d.jsonl"),
                              str(Path(folder) / "l.jsonl"), hmac_key=key)
+
+    def test_gateway_generates_authenticated_dashboard_passport(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db = str(Path(folder) / "events.db")
+            key = b"local-research-hmac-key-32-bytes"
+            first = ["research_node", "coherence_node"]
+            second = ["coherence_node"]
+            for i in range(30):
+                row = decision()
+                row["decision_id"] = f"report-{i}"
+                row["candidate_probabilities"] = [0.5, 0.5]
+                row["propensity"] = 0.5
+                row["candidates"] = [
+                    {"route": first, "action": action_id(first), "predicted_score": 0.9},
+                    {"route": second, "action": action_id(second), "predicted_score": 0.7},
+                ]
+                row["action"] = action_id(first if i % 2 == 0 else second)
+                record_event(db, "decision", row, hmac_key=key)
+                outcome = label()
+                outcome["decision_id"] = row["decision_id"]
+                outcome["reward"] = float(i % 2)
+                record_event(db, "label", outcome, hmac_key=key)
+            out = Path(folder) / "passport"
+            result = build_report_from_gateway(
+                db, str(out), hmac_key=key,
+                baseline_policy="first_candidate",
+                candidate_policy="second_candidate", replicates=100,
+            )
+            self.assertEqual(result["n_labeled"], 30)
+            self.assertFalse(result["automatic_rollout_permitted"])
+            self.assertTrue((out / "index.html").exists())
+            self.assertTrue(verify_manifest(
+                str(out / "attestation.json"),
+                str(out / "decisions.jsonl"),
+                str(out / "labels.jsonl"),
+                report_path=str(out / "report.json"), secret=key,
+            )["verified"])
 
     def test_schema_rejects_raw_prompts_and_unlinked_labels(self):
         with tempfile.TemporaryDirectory() as folder:
