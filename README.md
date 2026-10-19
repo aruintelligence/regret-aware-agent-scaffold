@@ -432,3 +432,26 @@ aru-llm-paired --dataset dev-v1.1.json \
 ```
 
 The follow-up protocol was extended **after** seeing the first randomized result, and the public development data is not a private hidden holdout. Do not describe this as a confirmatory or enterprise-quality model evaluation.
+
+
+## Proof-carrying answers: verify the source or abstain
+
+The new dependency-free `grounding_contract.py` implements a **narrow, independently verifiable source-grounding contract**. A short model answer is accepted only if it occurs as a contiguous, word-bounded substring of the supplied passage. Accepted answers carry a source SHA-256 digest, source-character offsets, an answer digest, and optional model revision. Unsupported outputs are withheld. The verifier independently checks the original passage; no human-gold answer is needed to issue a certificate.
+
+```bash
+# Files remain local; avoid putting private source text in shell command arguments.
+aru-ground certify --context-file passage.txt --answer-file model-answer.txt \
+  --out proof.json --model-revision your-immutable-model-sha
+
+# Independently check source digest, offsets and exact extracted text.
+aru-ground verify --context-file passage.txt --proof-file proof.json
+# Exit code 0 means source-span proof valid; 1 means invalid.
+```
+
+**This is a proof of textual provenance, NOT proof of truth, relevance, entailment, absence of prompt injection, or answer correctness.** A wrong answer can appear in a passage. Useful paraphrases may be rejected. Local certificate files can contain a short accepted source span and must be handled according to the data's sensitivity.
+
+The real-model matched benchmark now reports **raw F1 vs source-gated F1, answer coverage, rejected answers, selective F1 among accepted answers, and failure counts**, alongside its existing article-cluster uncertainty. A separately preregistered [GROUNDING_PROTOCOL.md](GROUNDING_PROTOCOL.md) reserves public SQuAD question IDs 80–119 for a genuine open-weight model stress test. The test measures the cost of refusing unsupported answers rather than assuming an accuracy improvement.
+
+### An important negative result from the real model
+
+The completed matched 40-question follow-up (offset 40–79) found **direct-prompt mean F1 23.53%** and **grounded-prompt mean F1 21.50%**, a **−2.03 percentage-point** difference (exploratory article-cluster interval **−5.75 to +1.75 points**). Thus the restrictive prompt did **not** demonstrate a quality improvement. ĀRU records this negative evidence rather than claiming the initial unbalanced-arm advantage generalizes.
