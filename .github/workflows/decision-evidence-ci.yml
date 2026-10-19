@@ -1,0 +1,53 @@
+name: Decision Evidence Lab CI
+
+on:
+  push:
+    branches:
+      - main
+      - innovation/**
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile modules
+        run: python -m compileall -q .
+      - name: Run all unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Verify original scaffold benchmark
+        run: python benchmark.py --runs 3 > /dev/null
+      - name: Generate labeled synthetic evidence and HTML report
+        run: python experiment_cli.py demo --out-dir demo-report --n 500 --seed 7 > /dev/null
+      - name: Assert synthetic reports cannot authorize rollout
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("demo-report/report.json").read_text())
+          assert report["n_logged"] == 500
+          assert report["label_source_counts"]["synthetic"] == 500
+          assert not report["review_gate"]["candidate_for_human_review"]
+          assert not report["review_gate"]["automatic_rollout_permitted"]
+          assert Path("demo-report/index.html").exists()
+          print("Synthetic guardrails verified")
+          PY
+      - name: Upload synthetic evidence dashboard
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aru-synthetic-evidence-dashboard
+          path: demo-report/
+          retention-days: 14
