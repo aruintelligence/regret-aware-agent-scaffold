@@ -34,6 +34,9 @@ def render_paired_dashboard(report):
     def points(v):
         return f"{100*v:+.2f} pp"
     model = escape(report["model"])
+    gate = report["grounding_contract"]["direct_on_complete_pairs"]
+    direct_gate = report["arms"]["direct"]["grounding"]
+    extract_gate = report["arms"]["grounded_extract"]["grounding"]
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ĀRU · Real Model Paired Audit</title><style>
@@ -63,6 +66,15 @@ table{{border-collapse:collapse;width:100%}}th,td{{padding:13px 9px;border-botto
 <tr><td>Mean inference latency</td><td>{report["arms"]["direct"]["mean_latency_s"]:.2f}s</td><td>{report["arms"]["grounded_extract"]["mean_latency_s"]:.2f}s</td></tr></table>
 <p class="muted">Exploratory article-cluster bootstrap 95% interval: <strong>{points(ci["lower_95"])} to {points(ci["upper_95"])}</strong> ({ci["clusters"]} article clusters).</p>
 <p class="muted">Model: <code>{model}</code> · SHA-sorted public question offset: {report["offset"]} · Dataset SHA-256: <code>{escape(report["dataset_sha256"])}</code>.</p></section>
+<section class="panel"><div class="eyebrow">Proof-carrying answers · deterministic source contract</div>
+<h2>Show the source—or abstain.</h2>
+<p class="muted">Each generated answer is checked against the original passage. Accepted answers carry verifiable source offsets and hashes. Unsupported outputs are withheld rather than displayed. This proves only textual provenance, not correctness or entailment.</p>
+<table><tr><th>Metric</th><th>Direct prompt</th><th>Extractive prompt</th></tr>
+<tr><td>Source-backed answer coverage</td><td>{pct(direct_gate["accepted_fraction"])}</td><td>{pct(extract_gate["accepted_fraction"])}</td></tr>
+<tr><td>Unsupported outputs withheld</td><td>{direct_gate["rejected"]}</td><td>{extract_gate["rejected"]}</td></tr>
+<tr><td>Mean F1 after abstentions</td><td>{pct(gate["baseline_mean_f1"])}</td><td>{pct(gate["candidate_mean_f1"])}</td></tr>
+<tr><td>Mean F1 on accepted answers only</td><td>{pct(direct_gate["selective_f1_on_accepted_only"]) if direct_gate["selective_f1_on_accepted_only"] is not None else "N/A"}</td><td>{pct(extract_gate["selective_f1_on_accepted_only"]) if extract_gate["selective_f1_on_accepted_only"] is not None else "N/A"}</td></tr></table>
+<p class="muted">This guard does not improve model reasoning. It trades coverage for a strict source-span provenance guarantee; mean F1 may decline.</p></section>
 <div class="notice"><strong>Research limitations:</strong> {report["n_complete_pairs"]} questions is a small, public development-set sample, not an independent private benchmark or statistically powered trial. Cluster intervals are exploratory. No automatic rollout or enterprise performance claim is justified.</div>
 <p class="muted">Total calls: {report["n_requested_calls"]}; completed: {report["n_completed_calls"]}; failed: {report["n_failed_calls"]}. No raw model responses or question text are included in this report.</p>
 </main></body></html>"""
