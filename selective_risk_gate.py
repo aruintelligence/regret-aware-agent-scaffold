@@ -218,6 +218,8 @@ def apply_selective_risk_gate(policy, *, key, score, group,
         return {**base, "reason": "unsupported_policy"}
     if not policy.get("conditional_risk_screen_passed") or policy.get("selected_threshold") is None:
         return {**base, "reason": "no_risk_qualified_threshold"}
+    if not _valid_number(policy["selected_threshold"]) or not _valid_number(policy.get("target_error")):
+        return {**base, "reason": "invalid_policy_values"}
     if model_revision != policy.get("model_revision") or rubric_id != policy.get("rubric_id"):
         return {**base, "reason": "model_or_rubric_mismatch"}
     if group not in policy.get("groups", []):
@@ -228,6 +230,8 @@ def apply_selective_risk_gate(policy, *, key, score, group,
         return {**base, "reason": "score_below_threshold"}
     if not verify_grounding(source_proof, source_text):
         return {**base, "reason": "invalid_source_certificate"}
+    if source_proof.get("model_revision") != model_revision:
+        return {**base, "reason": "source_proof_model_mismatch"}
     # Check signed per-group risk bounds at release time too, not merely
     # a top-level boolean that might have been set incorrectly at fit time.
     matches = [c for c in policy.get("candidates", [])
