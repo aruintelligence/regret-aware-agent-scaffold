@@ -14,6 +14,7 @@ from pathlib import Path
 from sovereign_source_registry import (
     authorize_source, grant_source, revoke_source, verify_registry,
 )
+from source_registry_anchor import create_source_checkpoint, verify_source_checkpoint
 
 
 def _read(path):
@@ -41,6 +42,12 @@ def main():
     check.add_argument("--purpose", default="qa_source")
     verify = sub.add_parser("verify", help="Verify complete local HMAC consent event chain")
     verify.add_argument("--db", required=True)
+    anchor = sub.add_parser("anchor", help="Write separate-key consent history checkpoint")
+    anchor.add_argument("--db", required=True)
+    anchor.add_argument("--checkpoint", required=True)
+    anchor_check = sub.add_parser("verify-anchor", help="Verify anchored historical consent prefix")
+    anchor_check.add_argument("--db", required=True)
+    anchor_check.add_argument("--checkpoint", required=True)
     args = parser.parse_args()
     key = os.environ.get("ARU_SOURCE_REGISTRY_KEY", "").encode("utf-8")
     if len(key) < 32:
@@ -63,12 +70,24 @@ def main():
             owner=_read(args.owner_file).strip(),
             purpose=args.purpose, key=key,
         )
-    else:
+    elif args.command == "verify":
         result = verify_registry(args.db, key=key)
+    else:
+        anchor_key = os.environ.get("ARU_SOURCE_ANCHOR_KEY", "").encode("utf-8")
+        if len(anchor_key) < 32:
+            parser.error("ARU_SOURCE_ANCHOR_KEY must contain a separate 32+ byte secret")
+        if args.command == "anchor":
+            result = create_source_checkpoint(
+                args.db, args.checkpoint, registry_key=key, anchor_key=anchor_key,
+            )
+        else:
+            result = verify_source_checkpoint(
+                args.db, args.checkpoint, registry_key=key, anchor_key=anchor_key,
+            )
     print(json.dumps(result, indent=2, sort_keys=True))
     if args.command == "check" and not result["authorized"]:
         raise SystemExit(1)
-    if args.command == "verify" and not result["verified"]:
+    if args.command in ("verify", "verify-anchor") and not result["verified"]:
         raise SystemExit(1)
 
 
