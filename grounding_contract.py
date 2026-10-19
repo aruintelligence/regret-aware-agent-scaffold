@@ -34,7 +34,7 @@ def _candidate_answer(model_text):
     # Remove only a small, explicit list of answer-format wrappers.
     value = re.sub(r"^(?:answer|final answer)\s*:\s*", "", value, flags=re.IGNORECASE)
     value = value.strip().strip("\"'“”‘’").strip()
-    value = value.rstrip(".!?").strip()
+    value = value.rstrip(".!?").strip().strip("\\\"\u0027“”‘’").strip()
     return value if 0 < len(value) <= MAX_ANSWER_CHARS else ""
 
 
