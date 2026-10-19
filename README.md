@@ -597,3 +597,8 @@ The quorum endpoint is integrated with the existing **Sovereign Source Registry*
 `aru-risk` provides `fit`, `verify`, and `check` commands. `selective_risk_validation.py` runs reproducible known-truth Monte Carlo falsification, and dedicated tests exercise tampering, domain regressions, missing groups, insufficient support, model mismatch and source-proof failures.
 
 **No production reliability guarantee is claimed.** The confidence interpretation requires IID representative calibration and future tasks, predeclared thresholds/groups, correct independent labels, fixed model and rubric, and trusted group assignment. The system does not correct a wrong source, prevent distribution shift, or automatically authorize rollout. Its value is in **measuring and exposing uncertainty before displaying an answer**.
+
+
+### Sovereign consent-risk-proof integration
+
+`sovereign_risk_adapter.py` composes the existing revocable, purpose-limited source registry, optional separately keyed revocation checkpoint, signed calibration risk policy, and independently verifiable source-offset certificate. Source authorization must succeed **before model inference**. A stale calibration policy can be rejected by pinning the expected calibration-set ID. A deliberate SQLite revocation-tail deletion is detected when a separately retained checkpoint is required. This is a local research prototype; operator-attested grants are not independently verified legal consent and the authorization check is not atomic with final delivery.
