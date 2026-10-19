@@ -32,3 +32,16 @@ footer{border-top:1px solid var(--line);padding:30px 0 45px;display:flex;justify
 .proof-state{margin-top:20px;border:1px solid #3e837e;background:#173e43;color:#9ff5e9;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:750}
 .proof-copy h3{font-size:28px;letter-spacing:-.04em}
 @media(max-width:900px){.proof-grid{grid-template-columns:1fr}}
+
+/* Sovereign Source Registry product story */
+.sovereignty-panel{display:grid;grid-template-columns:1fr 1fr;gap:38px;align-items:center;padding:34px 0 8px}
+.sovereignty-panel h3{font-size:clamp(26px,3.5vw,39px);letter-spacing:-.045em;margin:14px 0}
+.consent-states{display:grid;gap:12px}
+.consent-state{display:flex;align-items:center;gap:14px;padding:19px;background:linear-gradient(120deg,#143147,#102237);border:1px solid var(--line);border-radius:16px}
+.consent-state>div{flex:1;min-width:0}.consent-state strong{display:block;font-size:16px}.consent-state small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.consent-indicator{display:block;width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.consent-indicator.granted{background:#71e0b3;box-shadow:0 0 0 5px #71e0b326}
+.consent-indicator.checked{background:var(--aqua);box-shadow:0 0 0 5px #70e0e126}
+.consent-indicator.revoked{background:#f5b4a4;box-shadow:0 0 0 5px #f5b4a426}
+.consent-label{font-size:10px;font-weight:850;letter-spacing:.12em;color:var(--gold)}
+@media(max-width:900px){.sovereignty-panel{grid-template-columns:1fr}}
