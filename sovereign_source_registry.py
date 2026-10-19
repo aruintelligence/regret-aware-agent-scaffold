@@ -175,6 +175,13 @@ def _append(db_path, kind, payload, *, key):
         state = _verify_locked(db, key)
         if not state["verified"]:
             raise RuntimeError("consent registry integrity failed; no event written")
+        if kind == "revoke":
+            grant_id = payload["grant_id"]
+            prior = state["grants"].get(grant_id)
+            if prior is None or prior["owner_ref"] != payload["owner_ref"]:
+                raise PermissionError("grant not found for owner")
+            if grant_id in state["revoked"]:
+                raise ValueError("grant already revoked")
         seq = state["events"] + 1
         previous = state["head_mac"]
         signature = _event_mac(key, seq, kind, payload, previous)
