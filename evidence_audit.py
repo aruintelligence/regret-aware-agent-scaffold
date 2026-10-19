@@ -78,15 +78,20 @@ def verify_manifest(manifest_path: str, decisions_path: str, labels_path: str,
     errors = []
     authentication = manifest.get("authentication")
     if authentication == "hmac-sha256":
-        signature = manifest.get("hmac_sha256", "")
+        signature = manifest.get("hmac_sha256")
         if not secret:
             errors.append("HMAC key required to verify authenticated manifest")
+        elif not isinstance(signature, str) or len(signature) != 64:
+            errors.append("Invalid or missing HMAC signature")
         else:
             payload = {key: value for key, value in manifest.items() if key != "hmac_sha256"}
             expected = hmac.new(secret, _canonical(payload), hashlib.sha256).hexdigest()
             if not hmac.compare_digest(signature, expected):
                 errors.append("Manifest HMAC authentication failed")
-    elif authentication != "unsigned-checksums":
+    elif authentication == "unsigned-checksums":
+        if secret is not None:
+            errors.append("Authentication downgrade: HMAC key supplied but manifest is unsigned")
+    else:
         errors.append("Unsupported authentication mode")
     paths = {"decisions": decisions_path, "labels": labels_path}
     if report_path:
