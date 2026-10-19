@@ -44,6 +44,7 @@ jobs:
           aru-local-model --help > /dev/null
           aru-llm-paired --help > /dev/null
           aru-ground --help > /dev/null
+          aru-qa-proof --help > /dev/null
       - name: Verify prospective pilot sample-size planner
         run: |
           aru-power --uplift 0.05 --discordance 0.25 --cluster-size 20 --icc 0.05 --missing 0.1 --grade-cost 1.5 --execution-cost 0.5 > /tmp/aru-pilot-plan.json
@@ -203,7 +204,7 @@ jobs:
     name: Real open-weight LLM · public human-gold QA
     if: github.event_name == 'pull_request' && github.event.pull_request.number == 2
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     needs: test
     steps:
       - uses: actions/checkout@v4
@@ -359,6 +360,45 @@ jobs:
           print("Gated paired difference:", gate["f1_difference"])
           print("These are public dev-set provenance metrics, NOT proof of factual truth.")
           PY
+      - name: Evaluate real pretrained extractive QA model vs real small LLM on disjoint 80-question sample
+        run: |
+          mkdir -p real-model-report/extractive-qa
+          sha256sum EXTRACTIVE_QA_PROTOCOL.md > real-model-report/extractive-qa-protocol.sha256
+          python qa_proof_benchmark.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir real-model-report/extractive-qa \
+            --qa-model distilbert/distilbert-base-cased-distilled-squad \
+            --llm-model HuggingFaceTB/SmolLM2-135M-Instruct \
+            --llm-endpoint http://127.0.0.1:1234/v1/chat/completions \
+            --limit 80 --offset 120 --seed 20261018 \
+            --max-tokens 48 --timeout-s 90 \
+            --acknowledge-model-calls
+      - name: Audit source-backed coverage and real QA model quality
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path("real-model-report/extractive-qa/report.json").read_text())
+          assert r["kind"] == "real_pretrained_extractive_qa_vs_small_llm_public_dev"
+          assert r["offset"] == 120 and r["limit"] == 80
+          assert r["qa_revision"], "real QA model revision must be recorded"
+          assert r["gold_answers_visible_to_models"] is False
+          assert r["n_complete_pairs"] >= 72
+          assert r["arms"]["qa"]["accepted"] >= 72
+          assert r["arms"]["qa"]["completed"] >= 72
+          assert not r["automatic_rollout_permitted"]
+          assert Path("real-model-report/extractive-qa/index.html").exists()
+          print("REAL EXTRACTIVE QA vs REAL SMALL LLM (PUBLIC SQuAD DEV)")
+          print("Specialized model:", r["qa_model"], "revision:", r["qa_revision"])
+          print("Matched questions:", r["n_complete_pairs"], "failures:", r["failures"])
+          for name, arm in r["arms"].items():
+              print("ARM", name, "coverage:", arm["accepted_fraction"],
+                    "mean F1:", arm["mean_f1"], "exact match:", arm["exact_match"],
+                    "latency:", arm["mean_latency_s"])
+          print("Paired QA minus LLM F1:", r["direct_qa_minus_raw_llm_f1"])
+          print("Article-cluster exploratory interval:", r["article_cluster_interval"])
+          print("Task-specific pretrained extractive model; not general AI superiority.")
+          PY
       - name: Audit real-model provenance and outcome completeness
         run: |
           python - <<'PY'
@@ -398,6 +438,7 @@ jobs:
             real-model-report/model.json
             real-model-report/protocol.sha256
             real-model-report/grounding-protocol.sha256
+            real-model-report/extractive-qa-protocol.sha256
             real-model-report/health.json
             real-model-report/evaluation/index.html
             real-model-report/evaluation/report.json
@@ -405,5 +446,7 @@ jobs:
             real-model-report/paired-followup/paired-report.json
             real-model-report/proof-carrying-answers/paired-index.html
             real-model-report/proof-carrying-answers/paired-report.json
+            real-model-report/extractive-qa/index.html
+            real-model-report/extractive-qa/report.json
           if-no-files-found: warn
           retention-days: 14
