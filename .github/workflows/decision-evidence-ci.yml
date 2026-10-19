@@ -243,6 +243,39 @@ jobs:
             sleep 2
           done
           test -s real-model-report/health.json || { tail -n 80 real-model-server.log; exit 1; }
+      - name: Smoke-test real-model proof-carrying answer API
+        run: |
+          python - <<'PY'
+          import json
+          import urllib.request
+          from grounding_contract import verify_grounding
+          context = "The telescope was built in Oregon in 1999."
+          body = {
+              "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+              "context": context,
+              "question": "Where was the telescope built?",
+              "max_tokens": 48,
+          }
+          request = urllib.request.Request(
+              "http://127.0.0.1:1234/v1/grounded/answers",
+              data=json.dumps(body).encode("utf-8"),
+              headers={"Content-Type": "application/json",
+                       "X-ARU-Consent": "research-opt-in"},
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=90) as response:
+              result = json.loads(response.read())
+          assert result["automatic_rollout_permitted"] is False
+          assert result["proof"]["source_sha256"]
+          assert result["proof"]["model_revision"]
+          if result["accepted"]:
+              assert verify_grounding(result["proof"], context)
+          else:
+              assert result["answer"] == ""
+          print("REAL-MODEL PROOF API:", "source-verified" if result["accepted"] else "abstained")
+          print("Proof reason:", result["proof"]["reason"])
+          print("No unsupported answer was displayed.")
+          PY
       - name: Evaluate real model responses against independent human answers
         run: |
           python llm_squad_benchmark.py \
