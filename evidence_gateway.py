@@ -15,11 +15,15 @@ import hmac
 import json
 import os
 import sqlite3
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from evidence_gateway_store import (
     EvidenceConflict, export_jsonl, record_event, verify_chain,
 )
+from evidence_lab import evaluate_experiment
+from evidence_dashboard import save_dashboard
+from evidence_audit import build_manifest, save_manifest
 
 
 def _load_secret(name, min_bytes):
@@ -120,6 +124,46 @@ def make_server(db_path, api_key, hmac_key, *, host="127.0.0.1", port=8765):
     return ThreadingHTTPServer((host, port), make_handler(db_path, api_key, hmac_key))
 
 
+def build_report_from_gateway(db_path, out_dir, *, hmac_key,
+                              baseline_policy="greedy",
+                              candidate_policy="shortest",
+                              replicates=300):
+    """Export, evaluate, visualize and attest consented research events."""
+    target = Path(out_dir)
+    target.mkdir(parents=True, exist_ok=True)
+    decisions = str(target / "decisions.jsonl")
+    labels = str(target / "labels.jsonl")
+    report_json = target / "report.json"
+    report_html = target / "index.html"
+    manifest_path = target / "attestation.json"
+    if any(p.exists() for p in (report_json, report_html, manifest_path)):
+        raise FileExistsError("report files already exist; use fresh output directory")
+    exported = export_jsonl(db_path, decisions, labels, hmac_key=hmac_key)
+    if not exported["labels"]:
+        raise ValueError("no external outcome labels; no report generated")
+    report = evaluate_experiment(
+        decisions, labels, baseline_policy=baseline_policy,
+        candidate_policy=candidate_policy, replicates=replicates,
+    )
+    report["source"] = {
+        "kind": "consented_local_gateway",
+        "audit_verified_before_export": True,
+        "note": "Local HMAC audit does not authenticate real-world truth of outcomes.",
+    }
+    report_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    save_dashboard(report, str(report_html))
+    manifest = build_manifest(decisions, labels, report_path=str(report_json),
+                              secret=hmac_key)
+    save_manifest(manifest, str(manifest_path))
+    return {
+        "report_json": str(report_json),
+        "report_html": str(report_html),
+        "attestation": str(manifest_path),
+        "n_labeled": report["n_labeled"],
+        "automatic_rollout_permitted": False,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -132,6 +176,12 @@ def main():
     export.add_argument("--db", required=True)
     export.add_argument("--decisions", required=True)
     export.add_argument("--labels", required=True)
+    report = sub.add_parser("report")
+    report.add_argument("--db", required=True)
+    report.add_argument("--out-dir", required=True)
+    report.add_argument("--baseline-policy", default="greedy")
+    report.add_argument("--candidate-policy", default="shortest")
+    report.add_argument("--replicates", type=int, default=300)
     args = parser.parse_args()
     hmac_key = _load_secret("ARU_GATEWAY_HMAC_KEY", 16)
     if args.command == "serve":
@@ -146,6 +196,13 @@ def main():
             server.server_close()
     elif args.command == "verify":
         print(json.dumps(verify_chain(args.db, hmac_key=hmac_key), indent=2))
+    elif args.command == "report":
+        print(json.dumps(build_report_from_gateway(
+            args.db, args.out_dir, hmac_key=hmac_key,
+            baseline_policy=args.baseline_policy,
+            candidate_policy=args.candidate_policy,
+            replicates=args.replicates,
+        ), indent=2))
     else:
         print(json.dumps(export_jsonl(args.db, args.decisions, args.labels,
                                       hmac_key=hmac_key), indent=2))
