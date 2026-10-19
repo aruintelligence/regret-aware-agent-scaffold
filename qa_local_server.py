@@ -16,17 +16,24 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from extractive_qa_engine import DEFAULT_QA_MODEL, ExtractiveQAEngine
 from grounding_contract import verify_grounding
 from sovereign_source_registry import authorize_source
+from source_registry_anchor import verify_source_checkpoint
 
 MAX_BODY = 30000
 
 
-def make_handler(engine, api_key, *, registry_db=None, registry_key=None):
+def make_handler(engine, api_key, *, registry_db=None, registry_key=None,
+                 registry_checkpoint=None, registry_anchor_key=None):
     if not isinstance(api_key, bytes) or len(api_key) < 24:
         raise ValueError("QA API key must be at least 24 bytes")
     if registry_db is not None and (
         not isinstance(registry_key, bytes) or len(registry_key) < 32
     ):
         raise ValueError("separate 32-byte source registry key required")
+    if registry_checkpoint is not None and (
+        registry_db is None or not isinstance(registry_anchor_key, bytes)
+        or len(registry_anchor_key) < 32
+    ):
+        raise ValueError("anchored consent requires registry and separate 32-byte anchor key")
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "ARU-QA-Research/0.1"
@@ -96,6 +103,19 @@ def make_handler(engine, api_key, *, registry_db=None, registry_key=None):
                     raise ValueError("invalid answer token limit")
                 source_authorization = None
                 if registry_db is not None:
+                    if registry_checkpoint is not None:
+                        try:
+                            checkpoint_result = verify_source_checkpoint(
+                                registry_db, registry_checkpoint,
+                                registry_key=registry_key,
+                                anchor_key=registry_anchor_key,
+                            )
+                        except (ValueError, OSError):
+                            self.respond(403, {"error": "source_checkpoint_unavailable"})
+                            return
+                        if not checkpoint_result["verified"]:
+                            self.respond(403, {"error": "source_checkpoint_invalid"})
+                            return
                     owner = self.headers.get("X-ARU-Owner", "")
                     if not owner:
                         self.respond(403, {"error": "source_owner_required"})
@@ -140,11 +160,14 @@ def make_handler(engine, api_key, *, registry_db=None, registry_key=None):
 
 
 def make_server(engine, api_key, *, host="127.0.0.1", port=1235,
-                registry_db=None, registry_key=None):
+                registry_db=None, registry_key=None,
+                registry_checkpoint=None, registry_anchor_key=None):
     if host != "127.0.0.1":
         raise ValueError("QA research server must bind only to IPv4 loopback")
     return ThreadingHTTPServer((host, port), make_handler(
         engine, api_key, registry_db=registry_db, registry_key=registry_key,
+        registry_checkpoint=registry_checkpoint,
+        registry_anchor_key=registry_anchor_key,
     ))
 
 
@@ -157,6 +180,8 @@ def main():
     parser.add_argument("--port", type=int, default=1235)
     parser.add_argument("--source-registry-db",
                         help="Optional consent-scoped source ledger; deny by default")
+    parser.add_argument("--source-anchor-checkpoint",
+                        help="Optional independently retained HMAC checkpoint for ledger prefix")
     args = parser.parse_args()
     key = os.environ.get("ARU_QA_API_KEY", "").encode("utf-8")
     if len(key) < 24:
@@ -170,9 +195,18 @@ def main():
         registry_key = os.environ.get("ARU_SOURCE_REGISTRY_KEY", "").encode("utf-8")
         if len(registry_key) < 32:
             parser.error("ARU_SOURCE_REGISTRY_KEY must contain at least 32 bytes")
+    registry_anchor_key = None
+    if args.source_anchor_checkpoint:
+        if not args.source_registry_db:
+            parser.error("--source-anchor-checkpoint requires --source-registry-db")
+        registry_anchor_key = os.environ.get("ARU_SOURCE_ANCHOR_KEY", "").encode("utf-8")
+        if len(registry_anchor_key) < 32:
+            parser.error("ARU_SOURCE_ANCHOR_KEY must contain a separate 32+ byte secret")
     server = make_server(
         engine, key, port=args.port,
         registry_db=args.source_registry_db, registry_key=registry_key,
+        registry_checkpoint=args.source_anchor_checkpoint,
+        registry_anchor_key=registry_anchor_key,
     )
     print("Authenticated QA research server ready on IPv4 loopback", flush=True)
     try:
