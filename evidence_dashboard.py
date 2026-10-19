@@ -26,6 +26,7 @@ def render_dashboard(report: dict) -> str:
     baseline = report["baseline"]
     candidate = report["candidate"]
     paired = report["paired_difference"]
+    anytime = report.get("anytime_ips_difference", {})
     gate = report["review_gate"]
     dr = report.get("crossfit_doubly_robust", {})
     segments = report.get("segment_diagnostics", [])
@@ -143,7 +144,9 @@ ul{{padding-left:22px;color:var(--muted)}}li{{margin:7px 0}}footer{{color:var(--
 <tr><th scope="row">Observed policy match</th><td>{_percent(baseline["match_rate"])}</td><td>{_percent(candidate["match_rate"])}</td></tr>
 <tr><th scope="row">Clipped weights</th><td>{baseline["clipped"]}</td><td>{candidate["clipped"]}</td></tr></tbody></table>
 <p><strong>Paired bootstrap 95% interval for candidate − baseline:</strong> {interval}</p>
-<p class="sub">Valid resamples: {paired["valid_replicates"]:,}. Assumes independent tasks; repeated or adaptive logs need a different inference design.</p></section>
+<p class="sub">Valid resamples: {paired["valid_replicates"]:,}. Assumes independent tasks; repeated or adaptive logs need a different inference design.</p>
+<p><strong>Time-uniform 95% lower bound for candidate − baseline:</strong> {_percent(anytime.get("lower_bound"))}</p>
+<p class="sub">Conditional randomization bound on the average value for logged contexts. Valid at a chosen stopping time with adaptive route probabilities if every task is labeled and both policies were fixed before outcomes were inspected. It does not certify a future population. {escape(anytime.get("reason", ""))}</p></section>
 <section class="panel"><div class="eyebrow">Conservative review gate</div><h2 class="status">{escape(status)}</h2>
 <ul>{reasons}</ul><p class="notice"><strong>Automatic rollout: prohibited.</strong> A passed statistical screen only permits human evaluation, prospective testing, and independent review.</p></section>
 <section class="panel"><h2 style="margin-top:0">Second estimator · cross-fitted doubly robust</h2>

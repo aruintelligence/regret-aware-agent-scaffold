@@ -13,6 +13,7 @@ from collections import Counter
 from typing import Dict, List, Optional
 
 from off_policy_evaluation import Decision, estimate
+from anytime_evidence import anytime_ips_lower_bound
 from crossfit_diagnostics import crossfit_dr, segment_diagnostics
 from route_experiments import (
     append_jsonl, choose_policy_action, load_decisions, read_jsonl,
@@ -175,6 +176,15 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
     paired["snips_difference"] = difference
     dr = crossfit_dr(rows, baseline_policy, candidate_policy, seed=seed, max_weight=max_weight)
     segments = segment_diagnostics(rows, baseline_policy, candidate_policy, max_weight=max_weight)
+    # Selectively missing outcomes invalidate the time-uniform sequence: it
+    # must include every randomized decision in its original logged order.
+    anytime = (anytime_ips_lower_bound(rows, baseline_policy, candidate_policy)
+               if len(rows) == len(decisions) else {
+                   "method": "conditional_hoeffding_ville_grid_v1",
+                   "lower_bound": None,
+                   "confidence": 0.95,
+                   "reason": "Unavailable until every logged decision has an outcome label",
+               })
 
     # Advisory review gate only; never silently change production policy.
     reasons = []
@@ -192,6 +202,8 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
         reasons.append("Insufficient target-policy overlap")
     if paired["lower_95"] is None or paired["lower_95"] <= min_uplift:
         reasons.append(f"Exploratory lower confidence bound does not exceed {min_uplift:g} uplift")
+    if anytime["lower_bound"] is None or anytime["lower_bound"] <= min_uplift:
+        reasons.append(f"Time-uniform lower bound does not exceed {min_uplift:g} uplift")
     harmed = [segment["task_signature"] for segment in segments if segment["material_negative_segment"]]
     if harmed:
         reasons.append(f"Material negative segment(s) observed: {len(harmed)}; investigate before review")
@@ -215,6 +227,7 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
         "baseline": baseline,
         "candidate": candidate,
         "paired_difference": paired,
+        "anytime_ips_difference": anytime,
         "crossfit_doubly_robust": dr,
         "segment_diagnostics": segments,
         "review_gate": {
@@ -230,6 +243,7 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
             "External labels are self-attested by the data provider, not independently authenticated.",
             "SNIPS is generally biased at finite samples; clipped IPS is also biased.",
             "The percentile bootstrap assumes independent tasks and may be invalid for adaptive or clustered logs.",
+            "The time-uniform bound permits adaptive logging under conditional randomization, complete bounded labels, and a fixed policy pair chosen before inspecting rewards; it does not cover post-hoc policy selection or future tasks.",
             "Cross-fitted DR uses a coarse shrinkage reward model; it is a diagnostic, not a validated outcome predictor.",
             "Segment-level harm checks are exploratory, may be noisy, and are not demographic fairness assessments.",
             "Evaluation uses only observed contexts and cannot establish performance under distribution shift.",
