@@ -127,6 +127,9 @@ jobs:
                         "baseline=", domain["baseline_accuracy"],
                         "candidate=", domain["candidate_accuracy"])
           print("Off-policy absolute error:", report["full_information_crosscheck"]["absolute_estimator_error"])
+          for stress in oracle["topic_mix_stress"]:
+              print("ADVERSARIAL TOPIC MIX:", stress["requested_tv_budget"],
+                    "worst_case_uplift=", stress["worst_case_uplift"])
           print("OPE SNIPS difference:", report["paired_difference"]["snips_difference"])
           print("Dataset SHA256:", oracle["dataset_sha256"])
           PY
