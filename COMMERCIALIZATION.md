@@ -24,6 +24,14 @@ The latest engineering iteration adds three commercially relevant but **not yet 
 
 A customer-facing proposition should emphasize **independently reproducible evidence, defensible experimental design, and human-controlled rollout**, not unverified claims of general AI intelligence or immunity to tampering.
 
+## New product wedge: proof-carrying source answers (experimental)
+
+A promising customer-facing feature is **source provenance with explicit abstention**. A short answer is displayed only when its exact text can be recovered from an identified passage, accompanied by a source digest and independently checkable character offsets. This is a verifiable **textual provenance** guarantee, not a claim that the answer is true or entailed.
+
+A genuine open-weight 135M-parameter model has now completed a public human-gold 40-question randomized integration test (40/40 calls) and a disjoint matched 40-question follow-up (80/80 calls). **The restrictive prompt did not improve matched F1**: direct 23.53% vs grounded 21.50%; paired difference −2.03 percentage points, exploratory article-cluster interval −5.75 to +1.75. This negative evidence reinforces the need to sell **auditability and transparent controls**, not an unproven quality uplift.
+
+The new source-grounding gate is being evaluated on a further disjoint public question subset. Its success criteria are correct certificate verification and honest reporting of coverage, rejection, and F1 tradeoffs, not higher model intelligence. Before selling it for enterprise knowledge management, add trusted-source controls, citation relevance and entailment checks, privacy safeguards, prompt-injection defenses, and independent customer tests.
+
 ## Target buyer and wedge
 
 Initial buyer hypothesis: head of AI platform, engineering director for agentic workflows, or an enterprise AI assurance lead at an organization deploying multiple AI agents.
