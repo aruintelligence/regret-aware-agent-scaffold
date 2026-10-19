@@ -11,6 +11,7 @@ import hmac
 import json
 import os
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -60,25 +61,30 @@ def _event_hash(prev, kind, event_id, created_at, canonical, key):
     return hmac.new(key, raw, hashlib.sha256).hexdigest() if key else hashlib.sha256(raw).hexdigest()
 
 
+@contextmanager
 def _connect(db_path):
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(str(path), timeout=10)
-    connection.execute("PRAGMA busy_timeout=10000")
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.execute("""CREATE TABLE IF NOT EXISTS events (
-        seq INTEGER PRIMARY KEY AUTOINCREMENT,
-        kind TEXT NOT NULL CHECK (kind IN ('decision','label')),
-        event_id TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        prev_hash TEXT NOT NULL,
-        event_hash TEXT NOT NULL,
-        UNIQUE(kind, event_id)
-    )""")
-    if os.name == "posix":
-        os.chmod(path, 0o600)
-    return connection
+    try:
+        connection.execute("PRAGMA busy_timeout=10000")
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("""CREATE TABLE IF NOT EXISTS events (
+            seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL CHECK (kind IN ('decision','label')),
+            event_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            prev_hash TEXT NOT NULL,
+            event_hash TEXT NOT NULL,
+            UNIQUE(kind, event_id)
+        )""")
+        if os.name == "posix":
+            os.chmod(path, 0o600)
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def record_event(db_path, kind, payload, *, hmac_key=None):
