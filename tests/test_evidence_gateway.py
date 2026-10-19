@@ -11,6 +11,7 @@ from pathlib import Path
 
 from evidence_gateway import build_report_from_gateway, make_server
 from evidence_audit import verify_manifest
+from evidence_checkpoint import create_checkpoint
 from evidence_gateway_store import (
     EvidenceConflict, export_jsonl, record_event, verify_chain,
 )
@@ -99,13 +100,19 @@ class GatewayStoreTests(unittest.TestCase):
                 outcome["decision_id"] = row["decision_id"]
                 outcome["reward"] = float(i % 2)
                 record_event(db, "label", outcome, hmac_key=key)
+            anchor_key = b"independent-test-anchor-secret-32-bytes"
+            checkpoint = str(Path(folder) / "anchor.json")
+            create_checkpoint(db, checkpoint, gateway_key=key, anchor_key=anchor_key)
             out = Path(folder) / "passport"
             result = build_report_from_gateway(
                 db, str(out), hmac_key=key,
                 baseline_policy="first_candidate",
                 candidate_policy="second_candidate", replicates=100,
+                anchor_checkpoint=checkpoint, anchor_key=anchor_key,
             )
             self.assertEqual(result["n_labeled"], 30)
+            report_json = json.loads((out / "report.json").read_text())
+            self.assertTrue(report_json["source"]["independent_checkpoint_verified"])
             self.assertFalse(result["automatic_rollout_permitted"])
             self.assertTrue((out / "index.html").exists())
             self.assertTrue(verify_manifest(
@@ -114,6 +121,20 @@ class GatewayStoreTests(unittest.TestCase):
                 str(out / "labels.jsonl"),
                 report_path=str(out / "report.json"), secret=key,
             )["verified"])
+            # A valid prefix still passes the ordinary HMAC chain after tail deletion,
+            # but must never produce a report when an independent anchor is required.
+            with sqlite3.connect(db) as conn:
+                conn.execute("DELETE FROM events WHERE seq=(SELECT MAX(seq) FROM events)")
+            self.assertTrue(verify_chain(db, hmac_key=key)["verified"])
+            blocked = Path(folder) / "blocked"
+            with self.assertRaises(RuntimeError):
+                build_report_from_gateway(
+                    db, str(blocked), hmac_key=key,
+                    baseline_policy="first_candidate",
+                    candidate_policy="second_candidate", replicates=100,
+                    anchor_checkpoint=checkpoint, anchor_key=anchor_key,
+                )
+            self.assertFalse((blocked / "report.json").exists())
 
     def test_schema_rejects_raw_prompts_and_unlinked_labels(self):
         with tempfile.TemporaryDirectory() as folder:
