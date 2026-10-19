@@ -47,6 +47,7 @@ jobs:
           aru-qa-proof --help > /dev/null
           aru-qa-serve --help > /dev/null
           aru-risk --help > /dev/null
+          aru-watch --help > /dev/null
           aru-source-registry --help > /dev/null
       - name: Verify prospective pilot sample-size planner
         run: |
@@ -106,6 +107,28 @@ jobs:
           assert bad <= 0.05, f"unexpected false certification in seeded synthetic null: {bad}"
           assert good >= 0.70, f"unexpected weak detection in seeded synthetic alternative: {good}"
           print(f"Synthetic risk screen: bad-model pass={bad:.3f}, good-model pass={good:.3f}")
+          PY
+      - name: Verify prospective signed anytime risk watch (synthetic only)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("/tmp/aru-watch-outcomes.jsonl")
+          path.write_text("".join(
+              json.dumps({"event_id": f"synthetic-{i}", "group": "general", "error": False}) + "\n"
+              for i in range(100)
+          ))
+          PY
+          export ARU_WATCH_SIGNING_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          aru-watch observe --outcomes-jsonl /tmp/aru-watch-outcomes.jsonl --groups general --model-revision fixed-test-sha --rubric-id test-grader --target-error 0.1 --alpha 0.05 --out /tmp/aru-watch-signed.json
+          aru-watch verify --report /tmp/aru-watch-signed.json
+          python - <<'PY'
+          import json
+          report = json.load(open("/tmp/aru-watch-signed.json"))
+          assert report["outcome_count"] == 100
+          assert not report["degradation_alarm"]
+          assert report["automatic_rollout_permitted"] is False
+          print("Synthetic signed prospective watch passed; no safety claim.")
           PY
       - name: Verify original scaffold benchmark
         run: python benchmark.py --runs 3 > /dev/null
