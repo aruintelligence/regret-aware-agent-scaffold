@@ -123,6 +123,12 @@ class GatewayStoreTests(unittest.TestCase):
                 record_event(db, "decision", {**decision(), "user_input": "secret"}, hmac_key=key)
             with self.assertRaises(ValueError):
                 record_event(db, "label", label(), hmac_key=key)
+            with self.assertRaises(ValueError):
+                record_event(db, "decision", {**decision(), "timestamp_unix": float("nan")},
+                             hmac_key=key)
+            with self.assertRaises(ValueError):
+                record_event(db, "decision", {**decision(), "loop_count": -1},
+                             hmac_key=key)
 
 
 class GatewayHTTPTests(unittest.TestCase):
