@@ -43,6 +43,7 @@ jobs:
           aru-anytime --help > /dev/null
           aru-local-model --help > /dev/null
           aru-llm-paired --help > /dev/null
+          aru-ground --help > /dev/null
       - name: Verify prospective pilot sample-size planner
         run: |
           aru-power --uplift 0.05 --discordance 0.25 --cluster-size 20 --icc 0.05 --missing 0.1 --grade-cost 1.5 --execution-cost 0.5 > /tmp/aru-pilot-plan.json
@@ -225,6 +226,7 @@ jobs:
         run: |
           mkdir -p real-model-report
           sha256sum REAL_MODEL_PROTOCOL.md > real-model-report/protocol.sha256
+          sha256sum GROUNDING_PROTOCOL.md > real-model-report/grounding-protocol.sha256
           python hf_local_server.py --model HuggingFaceTB/SmolLM2-135M-Instruct --threads 2 --port 1234 --metadata-json real-model-report/model.json > real-model-server.log 2>&1 &
           echo $! > /tmp/aru-real-model.pid
           for i in $(seq 1 150); do
@@ -283,6 +285,47 @@ jobs:
           print("Model calls completed:", report["n_completed_calls"])
           print("No general intelligence or hidden-holdout claims.")
           PY
+      - name: Run prospective source-grounding stress test on disjoint questions 80–119
+        run: |
+          python llm_paired_audit.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir real-model-report/proof-carrying-answers \
+            --model HuggingFaceTB/SmolLM2-135M-Instruct \
+            --endpoint http://127.0.0.1:1234/v1/chat/completions \
+            --limit 40 --offset 80 --seed 20261018 \
+            --max-tokens 48 --timeout-s 90 \
+            --acknowledge-model-calls
+      - name: Verify source proofs and quantify coverage/accuracy tradeoff
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("real-model-report/proof-carrying-answers/paired-report.json").read_text())
+          assert report["offset"] == 80 and report["limit"] == 40
+          assert report["n_requested_calls"] == 80
+          assert report["n_complete_pairs"] >= 36
+          assert report["n_failed_calls"] <= 4
+          assert not report["automatic_rollout_permitted"]
+          assert Path("real-model-report/proof-carrying-answers/paired-index.html").exists()
+          gate = report["grounding_contract"]["direct_on_complete_pairs"]
+          assert gate["all_accepted_answers_are_verifiable_source_substrings"]
+          assert gate["unaccepted_outputs_abstain"]
+          for arm_name, arm in report["arms"].items():
+              proof = arm["grounding"]
+              assert proof["accepted"] + proof["rejected"] == arm["completed"]
+              assert 0 <= proof["accepted_fraction"] <= 1
+              assert 0 <= proof["mean_f1_with_abstentions_as_zero"] <= 1
+              print("PROOF-CARRYING ANSWERS:", arm_name,
+                    "accepted:", proof["accepted"],
+                    "rejected:", proof["rejected"],
+                    "coverage:", proof["accepted_fraction"],
+                    "raw_F1:", arm["mean_f1_on_completed_calls"],
+                    "gated_F1:", proof["mean_f1_with_abstentions_as_zero"],
+                    "selective_F1:", proof["selective_f1_on_accepted_only"])
+          print("Raw paired difference:", report["direct"]["f1_difference"])
+          print("Gated paired difference:", gate["f1_difference"])
+          print("These are public dev-set provenance metrics, NOT proof of factual truth.")
+          PY
       - name: Audit real-model provenance and outcome completeness
         run: |
           python - <<'PY'
@@ -321,10 +364,13 @@ jobs:
           path: |
             real-model-report/model.json
             real-model-report/protocol.sha256
+            real-model-report/grounding-protocol.sha256
             real-model-report/health.json
             real-model-report/evaluation/index.html
             real-model-report/evaluation/report.json
             real-model-report/paired-followup/paired-index.html
             real-model-report/paired-followup/paired-report.json
+            real-model-report/proof-carrying-answers/paired-index.html
+            real-model-report/proof-carrying-answers/paired-report.json
           if-no-files-found: warn
           retention-days: 14
