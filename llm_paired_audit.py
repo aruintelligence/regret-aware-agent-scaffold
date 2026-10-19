@@ -20,6 +20,7 @@ from html import escape
 from pathlib import Path
 
 from llm_executor import EndpointError, run_chat, validate_endpoint
+from grounding_contract import ground_answer, verify_grounding
 from llm_squad_benchmark import build_messages, score_response
 from squad_benchmark import cluster_oracle_interval, paired_oracle_interval
 from squad_sentence_retrieval import load_questions
@@ -90,12 +91,16 @@ def run_paired_audit(dataset_path, out_dir, *, model,
         raise FileExistsError("paired report already exists; choose fresh directory")
     rng = random.Random(seed)
     scores = []
+    grounded_scores = []
     by_article = defaultdict(list)
     by_paragraph = defaultdict(list)
     arms = {
         0: {"requests": 0, "completed": 0, "f1_sum": 0.0,
             "exact_match_sum": 0.0, "latency_sum": 0.0,
-            "prompt_tokens": 0, "completion_tokens": 0},
+            "prompt_tokens": 0, "completion_tokens": 0,
+            "grounded_accepted": 0, "grounded_rejected": 0,
+            "grounded_f1_sum": 0.0, "grounded_em_sum": 0.0,
+            "grounded_rejection_reasons": defaultdict(int)},
         1: {"requests": 0, "completed": 0, "f1_sum": 0.0,
             "exact_match_sum": 0.0, "latency_sum": 0.0,
             "prompt_tokens": 0, "completion_tokens": 0},
@@ -105,6 +110,7 @@ def run_paired_audit(dataset_path, out_dir, *, model,
         first = rng.randrange(2)
         order = (first, 1 - first)
         outcome = {}
+        grounded_outcome = {}
         for route in order:
             arms[route]["requests"] += 1
             started = time.perf_counter()
@@ -119,8 +125,21 @@ def run_paired_audit(dataset_path, out_dir, *, model,
                 continue
             elapsed = time.perf_counter() - started
             result = score_response(response["text"], answers)
+            proof = ground_answer(response["text"], context)
+            if proof["accepted"] and not verify_grounding(proof, context):
+                raise RuntimeError("source grounding proof verification failed")
+            grounded = score_response(proof["answer"], answers) if proof["accepted"] else {
+                "f1": 0.0, "exact_match": 0.0,
+            }
             outcome[route] = result
+            grounded_outcome[route] = grounded
             arm = arms[route]
+            arm["grounded_accepted"] += int(proof["accepted"])
+            arm["grounded_rejected"] += int(not proof["accepted"])
+            arm["grounded_f1_sum"] += grounded["f1"]
+            arm["grounded_em_sum"] += grounded["exact_match"]
+            if not proof["accepted"]:
+                arm["grounded_rejection_reasons"][proof["reason"]] += 1
             arm["completed"] += 1
             arm["f1_sum"] += result["f1"]
             arm["exact_match_sum"] += result["exact_match"]
@@ -130,6 +149,7 @@ def run_paired_audit(dataset_path, out_dir, *, model,
         if len(outcome) == 2:
             pair = (outcome[0]["f1"], outcome[1]["f1"])
             scores.append((pair, (outcome[0]["exact_match"], outcome[1]["exact_match"])))
+            grounded_scores.append((grounded_outcome[0]["f1"], grounded_outcome[1]["f1"]))
             by_article[title].append(pair)
             by_paragraph[hashlib.sha256(context.encode("utf-8")).hexdigest()].append(pair)
     if len(scores) < 2:
@@ -145,6 +165,15 @@ def run_paired_audit(dataset_path, out_dir, *, model,
         "candidate_exact_match": sum(b for _, b in exact) / n,
         "exact_match_difference": sum(b - a for a, b in exact) / n,
     }
+    grounded_n = len(grounded_scores)
+    grounded_direct = {
+        "baseline_mean_f1": sum(a for a, _ in grounded_scores) / grounded_n,
+        "candidate_mean_f1": sum(b for _, b in grounded_scores) / grounded_n,
+        "f1_difference": sum(b - a for a, b in grounded_scores) / grounded_n,
+        "all_accepted_answers_are_verifiable_source_substrings": True,
+        "unaccepted_outputs_abstain": True,
+        "warning": "Verifiable source substring is NOT evidence of factual correctness or entailment.",
+    }
     arm_reports = {
         name: {
             "requests": arm["requests"],
@@ -153,6 +182,15 @@ def run_paired_audit(dataset_path, out_dir, *, model,
             "mean_latency_s": arm["latency_sum"] / arm["completed"] if arm["completed"] else None,
             "prompt_tokens": arm["prompt_tokens"],
             "completion_tokens": arm["completion_tokens"],
+            "grounding": {
+                "accepted": arm["grounded_accepted"],
+                "rejected": arm["grounded_rejected"],
+                "accepted_fraction": arm["grounded_accepted"] / arm["completed"] if arm["completed"] else None,
+                "mean_f1_with_abstentions_as_zero": arm["grounded_f1_sum"] / arm["completed"] if arm["completed"] else None,
+                "exact_match_with_abstentions_as_zero": arm["grounded_em_sum"] / arm["completed"] if arm["completed"] else None,
+                "selective_f1_on_accepted_only": arm["grounded_f1_sum"] / arm["grounded_accepted"] if arm["grounded_accepted"] else None,
+                "rejection_reasons": dict(arm["grounded_rejection_reasons"]),
+            },
         }
         for name, arm in (("direct", arms[0]), ("grounded_extract", arms[1]))
     }
@@ -174,6 +212,11 @@ def run_paired_audit(dataset_path, out_dir, *, model,
         "n_failed_calls": failed,
         "n_complete_pairs": n,
         "direct": direct,
+        "grounding_contract": {
+            "kind": "source_substring_proof_and_abstention",
+            "direct_on_complete_pairs": grounded_direct,
+            "scope": "source substring provenance only; does not establish answer correctness",
+        },
         "arms": arm_reports,
         "paired_question_interval": paired_oracle_interval(pairs, replicates=replicates, seed=seed + 1),
         "article_cluster_interval": cluster_oracle_interval(by_article, replicates=replicates, seed=seed + 2),
@@ -187,6 +230,8 @@ def run_paired_audit(dataset_path, out_dir, *, model,
             "Cluster percentile intervals are exploratory and may be unstable with few clusters.",
             "Model endpoint provenance must be independently recorded; mock endpoints do not validate a model.",
             "No raw questions, answers or generated text are included in the report.",
+            "Grounding gate rejects outputs that cannot be matched to a contiguous passage span; this proves textual provenance only, not truth or entailment.",
+            "Abstention may lower mean F1 while reducing unsupported displayed answers; both costs and benefits are reported.",
         ],
     }
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
