@@ -81,3 +81,7 @@ The sequential interpretation requires a prospective, predeclared inclusion rule
 **Research goal:** combine static risk calibration, real-time degradation evidence, and source verification into a defensible human-reviewed AI assurance workflow. Production readiness, commercial value, safety, and customer performance remain unproven.
 
 The [preregistered public real-model audit](REAL_MODEL_WATCH_PROTOCOL.md) connects this monitor to actual QA calls scored against published human answers. Its injected post-onset errors and simulated null streams are explicitly synthetic. The unsigned audit is distinct from the signed, independently anchored evidence required for the release gate.
+
+## Finite restart research follow-up
+
+The original [observed result](REAL_MODEL_WATCH_RESULTS.md) found only 1/6 injected shifts by 120 requests. The separate [frozen change-point protocol](CHANGE_POINT_PROTOCOL.md) evaluates a predeclared set of global restart positions on disjoint question IDs, with a larger familywise multiplicity threshold. It includes a deliberate context-limitation intervention using **additional real model calls**, scored against published human answers, alongside separately marked synthetic label-flip stress. The new `change_point_watch.py` report is unsigned and **cannot** substitute for the current signed watch in `gate_with_risk_watch`. Its performance will be reported only after the new CI run; no alarm remains inconclusive.

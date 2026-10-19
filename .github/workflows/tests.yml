@@ -83,3 +83,86 @@ jobs:
             real-watch-report/audit/report.json
           if-no-files-found: warn
           retention-days: 14
+  real_change_point_audit:
+    name: Disjoint real-model change-point audit · deliberate retrieval intervention
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 7
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned real-model CPU runtime
+        run: |
+          python -m pip install --disable-pip-version-check torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check transformers==4.48.3 safetensors==0.5.3
+      - name: Fetch pinned human-annotated dataset and hash frozen protocol
+        run: |
+          mkdir -p benchmark-data change-point-report
+          curl --fail --location --show-error --silent --retry 3 --max-time 120 https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json --output benchmark-data/dev-v1.1.json
+          echo "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9  benchmark-data/dev-v1.1.json" | sha256sum --check
+          sha256sum CHANGE_POINT_PROTOCOL.md > change-point-report/protocol.sha256
+      - name: Collect real baseline and retrieval-intervention calls
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+          TOKENIZERS_PARALLELISM: 'false'
+        run: |
+          python change_point_audit.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir change-point-report/audit \
+            --qa-model distilbert/distilbert-base-cased-distilled-squad \
+            --acknowledge-model-calls
+      - name: Independently recompute both observed outcome traces
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from change_point_watch import restart_risk_stream
+          root = Path('change-point-report/audit')
+          report = json.loads((root / 'change_point_report.json').read_text())
+          rows = [json.loads(line) for line in (root / 'baseline/outcomes.jsonl').read_text().splitlines()]
+          changed = [json.loads(line) for line in (root / 'intervention_outcomes.jsonl').read_text().splitlines()]
+          assert report['kind'] == 'aru_disjoint_real_model_restart_research_audit'
+          assert report['dataset_sha256'] == '95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9'
+          assert report['offset'] == 320 and report['requested'] == len(rows) == len(changed) == 120
+          assert report['baseline_model_calls'] == 120 and report['intervention_additional_model_calls'] == 65
+          assert report['starts'] == [1, 21, 41, 61, 81, 101] and report['horizon'] == 120
+          assert report['intervention_onset_after_observations'] == 55
+          assert report['intervention_context_cap_characters'] == 128
+          assert rows[:55] == changed[:55]
+          assert all(a['event_id'] == b['event_id'] and a['group'] == b['group'] for a, b in zip(rows, changed))
+          assert report['baseline_errors'] == sum(row['error'] for row in rows)
+          assert report['intervention_errors'] == sum(row['error'] for row in changed)
+          assert report['model_revision'] and report['rubric_id']
+          assert report['intervention_is_natural_live_drift'] is False
+          assert report['label_flip_scenarios_are_synthetic'] is True
+          assert report['automatic_rollout_permitted'] is False
+          for stream, key in ((rows, 'baseline_restart_watch'), (changed, 'observed_intervention_restart_watch')):
+              result = restart_risk_stream(
+                  stream, groups=report['groups'], model_revision=report['model_revision'],
+                  rubric_id=report['rubric_id'], target_error=report['target_error'],
+                  alpha=report['familywise_alpha'], horizon=report['horizon'], starts=report['starts'],
+              )
+              assert result == report[key]
+          print('Real baseline errors:', report['baseline_errors'], 'alarm:', report['baseline_restart_watch']['first_alarm_global_observation'])
+          print('Real intervention errors:', report['intervention_errors'], 'alarm:', report['observed_intervention_restart_watch']['first_alarm_global_observation'])
+          print('Real intervention old-watch alarm:', report['observed_intervention_from_start_alarm'])
+          print('Synthetic stress scenarios:', report['injected_label_flip_scenarios'])
+          print('Synthetic IID null alarms:', report['synthetic_iid_conditional_null'])
+          print('This is a deliberate retrieval intervention, NOT observed spontaneous live drift.')
+          PY
+      - name: Retain frozen research evidence without question or answer text
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aru-change-point-disjoint-real-model-audit
+          path: |
+            change-point-report/protocol.sha256
+            change-point-report/audit/baseline/outcomes.jsonl
+            change-point-report/audit/baseline/report.json
+            change-point-report/audit/intervention_outcomes.jsonl
+            change-point-report/audit/change_point_report.json
+          if-no-files-found: warn
+          retention-days: 14
