@@ -27,6 +27,16 @@ def render_dashboard(report: dict) -> str:
     candidate = report["candidate"]
     paired = report["paired_difference"]
     gate = report["review_gate"]
+    dr = report.get("crossfit_doubly_robust", {})
+    segments = report.get("segment_diagnostics", [])
+    segment_rows = "".join(
+        "<tr><th scope=\"row\">" + escape(row["task_signature"]) + "</th>"
+        + "<td>" + str(row["n_labeled"]) + "</td>"
+        + "<td>" + _percent(row["baseline_snips"]) + "</td>"
+        + "<td>" + _percent(row["candidate_snips"]) + "</td>"
+        + "<td>" + _percent(row["difference"]) + (" ⚠" if row["material_negative_segment"] else "") + "</td></tr>"
+        for row in segments[:20]
+    )
     is_synthetic = report["label_source_counts"].get("synthetic", 0) > 0
     badge = "SYNTHETIC DEMONSTRATION" if is_synthetic else "SELF-ATTESTED EXTERNAL LABELS"
     status = "REVIEW SCREEN PASSED" if gate["candidate_for_human_review"] else "NOT CLEARED FOR REVIEW"
@@ -86,6 +96,12 @@ ul{{padding-left:22px;color:var(--muted)}}li{{margin:7px 0}}footer{{color:var(--
 <p class="sub">Valid resamples: {paired["valid_replicates"]:,}. Assumes independent tasks; repeated or adaptive logs need a different inference design.</p></section>
 <section class="panel"><div class="eyebrow">Conservative review gate</div><h2 class="status">{escape(status)}</h2>
 <ul>{reasons}</ul><p class="notice"><strong>Automatic rollout: prohibited.</strong> A passed statistical screen only permits human evaluation, prospective testing, and independent review.</p></section>
+<section class="panel"><h2 style="margin-top:0">Second estimator · cross-fitted doubly robust</h2>
+<p>Baseline DR: <strong>{_percent(dr.get("baseline_dr"))}</strong> · Candidate DR: <strong>{_percent(dr.get("candidate_dr"))}</strong> · Difference: <strong>{_percent(dr.get("difference"))}</strong></p>
+<p class="sub">Out-of-fold shrinkage reward model; this is a separate diagnostic, not an independent replication or validated reward predictor.</p>
+<h2>Domain-level safety signals</h2>
+<div style="overflow-x:auto"><table><thead><tr><th scope="col">Task signature</th><th scope="col">N</th><th scope="col">Baseline</th><th scope="col">Candidate</th><th scope="col">Difference</th></tr></thead>
+<tbody>{segment_rows}</tbody></table></div><p class="sub">A ⚠ flags an observed material negative segment with minimum support. It is an investigation trigger, not proof of subgroup harm.</p></section>
 <section class="panel"><h2 style="margin-top:0">Evidence provenance</h2>
 <p>Labels: {source or "None"} · distinct graders: {report["distinct_graders"]} · runtime: {escape(", ".join(report["runtime_kind"]))}</p>
 <h2>Interpretation limits</h2><ul>{limitations}</ul></section>
