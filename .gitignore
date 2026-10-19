@@ -19,3 +19,8 @@ dev-v1.1.json
 *.db
 *.db-wal
 *.db-shm
+
+# Optional package build artifacts
+*.egg-info/
+build/
+dist/
