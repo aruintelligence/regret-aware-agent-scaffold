@@ -85,6 +85,11 @@ aru-risk fit --calibration-jsonl independent-calibration.jsonl \
 
 # Verify HMAC, then check a specific source-certified model answer.
 aru-risk verify --policy signed-risk-policy.json
+
+# Premium standalone HTML report: HMAC-verified aggregate and group risk evidence.
+aru-risk dashboard --policy signed-risk-policy.json \
+  --out signed-risk-dashboard.html
+
 aru-risk check --policy signed-risk-policy.json \
   --score 0.91 --group technical \
   --source-file approved-source.txt --proof-file answer-proof.json \
@@ -111,3 +116,10 @@ The bound can become invalid if the calibration sample is nonrepresentative, cor
 A policy passing this statistical screen is a **research recommendation for human evaluation**, not a license to deploy it. A production system additionally needs independently audited model and data provenance, secure authentication, privacy/consent, live drift monitoring, rollback, and appropriate statistical review.
 
 **Commercial hypothesis:** enterprise teams may value a measurable, source-backed answer-release policy that is conservative enough to abstain when evidence is insufficient. Demand, pricing, model quality, customer ROI and enterprise security are not yet established.
+
+
+## Evidence dashboard
+
+`selective_risk_dashboard.py` produces a responsive standalone HTML research dashboard with the chosen threshold, calibration coverage, predeclared target, every threshold's subgroup error count, observed error and exact simultaneous upper bound. The dashboard refuses an invalid HMAC and includes **no raw calibration rows, passages or generated answers**. Its labels and warnings emphasize that a statistical screen does not permit automatic rollout.
+
+This is an operator-review artifact, not a remotely hosted SaaS or a cryptographically immutable public transparency record.
