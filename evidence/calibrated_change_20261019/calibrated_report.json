@@ -1,0 +1,713 @@
+{
+  "automatic_rollout_permitted": false,
+  "baseline_calibrated_watch": {
+    "alarm_components": [],
+    "alpha_total": 0.05,
+    "automatic_rollout_permitted": false,
+    "bet_fractions": [
+      0.02,
+      0.05,
+      0.1,
+      0.2,
+      0.4,
+      0.8
+    ],
+    "calibration_bound": "one_sided_Hoeffding_IID_Bernoulli_union_over_slices",
+    "calibration_delta": 0.025,
+    "calibration_failures": [],
+    "calibration_outcome_count": 120,
+    "calibration_outcomes_sha256": "4c1f1d6befa351c3c13bf8b921b1f74e9526367d814bd56ceb2acf14e2f90f7a",
+    "calibration_ready": true,
+    "calibration_targets": {
+      "__all__": {
+        "errors": 12,
+        "n_calibration": 120,
+        "observed_error_fraction": 0.1,
+        "one_sided_upper_error_bound": 0.24123697200659555
+      },
+      "long_source": {
+        "errors": 10,
+        "n_calibration": 81,
+        "observed_error_fraction": 0.12345679012345678,
+        "one_sided_upper_error_bound": 0.29536495794954143
+      },
+      "short_source": {
+        "errors": 2,
+        "n_calibration": 39,
+        "observed_error_fraction": 0.05128205128205128,
+        "one_sided_upper_error_bound": 0.29902808912410533
+      }
+    },
+    "component_count": 18,
+    "degradation_alarm": false,
+    "first_alarm_global_observation": null,
+    "groups": [
+      "short_source",
+      "long_source"
+    ],
+    "horizon": 120,
+    "kind": "aru_research_calibrated_restart_watch",
+    "limitations": [
+      "The combined alpha bound requires IID per-slice calibration errors, stable probabilities, a complete independent monitoring stream and the conditional monitoring null.",
+      "Group assignment must precede each outcome; changing group mix can break the aggregate null.",
+      "Shared articles and repository grading may violate sampling assumptions.",
+      "A no-alarm path is not proof of safety or an error-rate ceiling.",
+      "This unsigned research monitor is not a signed production release certificate."
+    ],
+    "log_alarm_threshold": 6.579251212010101,
+    "min_slice_calibration": 20,
+    "model_revision": "564e9b582944a57a3e586bbb98fd6f0a4118db7f",
+    "monitoring_alpha": 0.025,
+    "monitoring_outcome_count": 120,
+    "monitoring_outcomes_sha256": "4e96bff8029558bb2717d8bc309d6e7305bf53492804b6a81dfe6fd821535525",
+    "monitoring_state": "no_alarm_observed",
+    "rubric_id": "squad_v1.1_human_gold_normalized_f1_at_least_0.5_v1",
+    "schema_version": 1,
+    "starts": [
+      1,
+      21,
+      41,
+      61,
+      81,
+      101
+    ],
+    "windows": [
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": false,
+            "errors": 9,
+            "final_log_e": -3.4187446647228867,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 120,
+            "observed_error_rate": 0.075
+          },
+          "long_source": {
+            "degradation_alarm": false,
+            "errors": 3,
+            "final_log_e": -2.784655381847018,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 67,
+            "observed_error_rate": 0.04477611940298507
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 6,
+            "final_log_e": -2.1354482163728767,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 53,
+            "observed_error_rate": 0.11320754716981132
+          }
+        },
+        "start_global_observation": 1
+      },
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": false,
+            "errors": 7,
+            "final_log_e": -3.146198190225518,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 100,
+            "observed_error_rate": 0.07
+          },
+          "long_source": {
+            "degradation_alarm": false,
+            "errors": 2,
+            "final_log_e": -2.6113538481321394,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 57,
+            "observed_error_rate": 0.03508771929824561
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 5,
+            "final_log_e": -1.9137954156900923,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 43,
+            "observed_error_rate": 0.11627906976744186
+          }
+        },
+        "start_global_observation": 21
+      },
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": false,
+            "errors": 6,
+            "final_log_e": -2.7607637938139096,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.600494784049646,
+            "n_observed": 80,
+            "observed_error_rate": 0.075
+          },
+          "long_source": {
+            "degradation_alarm": false,
+            "errors": 2,
+            "final_log_e": -2.217861745978832,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 43,
+            "observed_error_rate": 0.046511627906976744
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 4,
+            "final_log_e": -1.8139346713929974,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.4783378533861278,
+            "n_observed": 37,
+            "observed_error_rate": 0.10810810810810811
+          }
+        },
+        "start_global_observation": 41
+      },
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": false,
+            "errors": 4,
+            "final_log_e": -2.4429766611904844,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 60,
+            "observed_error_rate": 0.06666666666666667
+          },
+          "long_source": {
+            "degradation_alarm": false,
+            "errors": 2,
+            "final_log_e": -1.8938532772969034,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 33,
+            "observed_error_rate": 0.06060606060606061
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 2,
+            "final_log_e": -1.6738389359091326,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 27,
+            "observed_error_rate": 0.07407407407407407
+          }
+        },
+        "start_global_observation": 61
+      },
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": false,
+            "errors": 2,
+            "final_log_e": -2.0833294239422457,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 40,
+            "observed_error_rate": 0.05
+          },
+          "long_source": {
+            "degradation_alarm": false,
+            "errors": 1,
+            "final_log_e": -1.5963192032225353,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 22,
+            "observed_error_rate": 0.045454545454545456
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 1,
+            "final_log_e": -1.420903900968824,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 18,
+            "observed_error_rate": 0.05555555555555555
+          }
+        },
+        "start_global_observation": 81
+      },
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": false,
+            "errors": 1,
+            "final_log_e": -1.4828252484992979,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 20,
+            "observed_error_rate": 0.05
+          },
+          "long_source": {
+            "degradation_alarm": false,
+            "errors": 0,
+            "final_log_e": -1.219160118805906,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 11,
+            "observed_error_rate": 0.0
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 1,
+            "final_log_e": -0.8988657137529051,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 9,
+            "observed_error_rate": 0.1111111111111111
+          }
+        },
+        "start_global_observation": 101
+      }
+    ]
+  },
+  "baseline_errors": 9,
+  "baseline_execution_failures": 0,
+  "baseline_model_calls": 120,
+  "baseline_verified_source_certificates": 120,
+  "calibration_errors": 12,
+  "calibration_execution_failures": 0,
+  "calibration_model_calls": 120,
+  "calibration_offset": 440,
+  "calibration_requested": 120,
+  "calibration_verified_source_certificates": 120,
+  "dataset": "Stanford SQuAD v1.1 public development split",
+  "dataset_sha256": "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9",
+  "evaluation_offset": 560,
+  "evaluation_requested": 120,
+  "intervention_additional_model_calls": 65,
+  "intervention_calibrated_watch": {
+    "alarm_components": [
+      {
+        "first_crossing_global_observation": 119,
+        "slice": "__all__",
+        "start_global_observation": 1
+      },
+      {
+        "first_crossing_global_observation": 105,
+        "slice": "__all__",
+        "start_global_observation": 21
+      },
+      {
+        "first_crossing_global_observation": 86,
+        "slice": "__all__",
+        "start_global_observation": 41
+      },
+      {
+        "first_crossing_global_observation": 100,
+        "slice": "long_source",
+        "start_global_observation": 41
+      },
+      {
+        "first_crossing_global_observation": 80,
+        "slice": "__all__",
+        "start_global_observation": 61
+      },
+      {
+        "first_crossing_global_observation": 90,
+        "slice": "long_source",
+        "start_global_observation": 61
+      },
+      {
+        "first_crossing_global_observation": 100,
+        "slice": "__all__",
+        "start_global_observation": 81
+      },
+      {
+        "first_crossing_global_observation": 100,
+        "slice": "long_source",
+        "start_global_observation": 81
+      }
+    ],
+    "alpha_total": 0.05,
+    "automatic_rollout_permitted": false,
+    "bet_fractions": [
+      0.02,
+      0.05,
+      0.1,
+      0.2,
+      0.4,
+      0.8
+    ],
+    "calibration_bound": "one_sided_Hoeffding_IID_Bernoulli_union_over_slices",
+    "calibration_delta": 0.025,
+    "calibration_failures": [],
+    "calibration_outcome_count": 120,
+    "calibration_outcomes_sha256": "4c1f1d6befa351c3c13bf8b921b1f74e9526367d814bd56ceb2acf14e2f90f7a",
+    "calibration_ready": true,
+    "calibration_targets": {
+      "__all__": {
+        "errors": 12,
+        "n_calibration": 120,
+        "observed_error_fraction": 0.1,
+        "one_sided_upper_error_bound": 0.24123697200659555
+      },
+      "long_source": {
+        "errors": 10,
+        "n_calibration": 81,
+        "observed_error_fraction": 0.12345679012345678,
+        "one_sided_upper_error_bound": 0.29536495794954143
+      },
+      "short_source": {
+        "errors": 2,
+        "n_calibration": 39,
+        "observed_error_fraction": 0.05128205128205128,
+        "one_sided_upper_error_bound": 0.29902808912410533
+      }
+    },
+    "component_count": 18,
+    "degradation_alarm": true,
+    "first_alarm_global_observation": 80,
+    "groups": [
+      "short_source",
+      "long_source"
+    ],
+    "horizon": 120,
+    "kind": "aru_research_calibrated_restart_watch",
+    "limitations": [
+      "The combined alpha bound requires IID per-slice calibration errors, stable probabilities, a complete independent monitoring stream and the conditional monitoring null.",
+      "Group assignment must precede each outcome; changing group mix can break the aggregate null.",
+      "Shared articles and repository grading may violate sampling assumptions.",
+      "A no-alarm path is not proof of safety or an error-rate ceiling.",
+      "This unsigned research monitor is not a signed production release certificate."
+    ],
+    "log_alarm_threshold": 6.579251212010101,
+    "min_slice_calibration": 20,
+    "model_revision": "564e9b582944a57a3e586bbb98fd6f0a4118db7f",
+    "monitoring_alpha": 0.025,
+    "monitoring_outcome_count": 120,
+    "monitoring_outcomes_sha256": "cc1675f66e3f96efbf8ccf13aeb21f579ab351516856d0d3e11d8457ab013b8a",
+    "monitoring_state": "alarm",
+    "rubric_id": "squad_v1.1_human_gold_normalized_f1_at_least_0.5_v1",
+    "schema_version": 1,
+    "starts": [
+      1,
+      21,
+      41,
+      61,
+      81,
+      101
+    ],
+    "windows": [
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": true,
+            "errors": 49,
+            "final_log_e": 6.4087394036356375,
+            "first_crossing_global_observation": 119,
+            "first_crossing_observation": 119,
+            "max_log_e": 6.622280878637284,
+            "n_observed": 120,
+            "observed_error_rate": 0.4083333333333333
+          },
+          "long_source": {
+            "degradation_alarm": false,
+            "errors": 30,
+            "final_log_e": 2.1873484041412348,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 2.3854466711023297,
+            "n_observed": 67,
+            "observed_error_rate": 0.44776119402985076
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 19,
+            "final_log_e": -0.1983060416679796,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.0,
+            "n_observed": 53,
+            "observed_error_rate": 0.3584905660377358
+          }
+        },
+        "start_global_observation": 1
+      },
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": true,
+            "errors": 47,
+            "final_log_e": 10.072694636172356,
+            "first_crossing_global_observation": 105,
+            "first_crossing_observation": 85,
+            "max_log_e": 10.4544800003266,
+            "n_observed": 100,
+            "observed_error_rate": 0.47
+          },
+          "long_source": {
+            "degradation_alarm": false,
+            "errors": 29,
+            "final_log_e": 4.097804656100042,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 4.455218983553051,
+            "n_observed": 57,
+            "observed_error_rate": 0.5087719298245614
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 18,
+            "final_log_e": 0.5917860856020916,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.7849911345399083,
+            "n_observed": 43,
+            "observed_error_rate": 0.4186046511627907
+          }
+        },
+        "start_global_observation": 21
+      },
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": true,
+            "errors": 46,
+            "final_log_e": 18.3139881223774,
+            "first_crossing_global_observation": 86,
+            "first_crossing_observation": 46,
+            "max_log_e": 18.823488701119285,
+            "n_observed": 80,
+            "observed_error_rate": 0.575
+          },
+          "long_source": {
+            "degradation_alarm": true,
+            "errors": 29,
+            "final_log_e": 10.524880444489149,
+            "first_crossing_global_observation": 100,
+            "first_crossing_observation": 32,
+            "max_log_e": 11.071828270097738,
+            "n_observed": 43,
+            "observed_error_rate": 0.6744186046511628
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 17,
+            "final_log_e": 1.1486153502543757,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 1.4777633297514643,
+            "n_observed": 37,
+            "observed_error_rate": 0.4594594594594595
+          }
+        },
+        "start_global_observation": 41
+      },
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": true,
+            "errors": 40,
+            "final_log_e": 20.587759163879273,
+            "first_crossing_global_observation": 80,
+            "first_crossing_observation": 20,
+            "max_log_e": 21.125933473524146,
+            "n_observed": 60,
+            "observed_error_rate": 0.6666666666666666
+          },
+          "long_source": {
+            "degradation_alarm": true,
+            "errors": 27,
+            "final_log_e": 17.393726546349708,
+            "first_crossing_global_observation": 90,
+            "first_crossing_observation": 16,
+            "max_log_e": 19.53180881712837,
+            "n_observed": 33,
+            "observed_error_rate": 0.8181818181818182
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 13,
+            "final_log_e": 1.0835451851521039,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 1.6230901964697542,
+            "n_observed": 27,
+            "observed_error_rate": 0.48148148148148145
+          }
+        },
+        "start_global_observation": 61
+      },
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": true,
+            "errors": 26,
+            "final_log_e": 12.266734553959314,
+            "first_crossing_global_observation": 100,
+            "first_crossing_observation": 20,
+            "max_log_e": 12.814542328017549,
+            "n_observed": 40,
+            "observed_error_rate": 0.65
+          },
+          "long_source": {
+            "degradation_alarm": true,
+            "errors": 18,
+            "final_log_e": 11.050562491071389,
+            "first_crossing_global_observation": 100,
+            "first_crossing_observation": 11,
+            "max_log_e": 13.149833097966086,
+            "n_observed": 22,
+            "observed_error_rate": 0.8181818181818182
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 8,
+            "final_log_e": 0.2926966405818665,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.9680366517186001,
+            "n_observed": 18,
+            "observed_error_rate": 0.4444444444444444
+          }
+        },
+        "start_global_observation": 81
+      },
+      {
+        "slices": {
+          "__all__": {
+            "degradation_alarm": false,
+            "errors": 12,
+            "final_log_e": 4.1485479965469345,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 4.653359992333948,
+            "n_observed": 20,
+            "observed_error_rate": 0.6
+          },
+          "long_source": {
+            "degradation_alarm": false,
+            "errors": 8,
+            "final_log_e": 2.8720704616307846,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 4.288663946672708,
+            "n_observed": 11,
+            "observed_error_rate": 0.7272727272727273
+          },
+          "short_source": {
+            "degradation_alarm": false,
+            "errors": 4,
+            "final_log_e": 0.049670255241106576,
+            "first_crossing_global_observation": null,
+            "first_crossing_observation": null,
+            "max_log_e": 0.4783378533861278,
+            "n_observed": 9,
+            "observed_error_rate": 0.4444444444444444
+          }
+        },
+        "start_global_observation": 101
+      }
+    ]
+  },
+  "intervention_context_cap_characters": 128,
+  "intervention_detection_delay": 25,
+  "intervention_errors": 49,
+  "intervention_execution_failures": 0,
+  "intervention_is_natural_live_drift": false,
+  "intervention_onset_after_observations": 55,
+  "intervention_pre_onset_alarm": false,
+  "intervention_verified_source_certificates": 65,
+  "kind": "aru_independently_calibrated_restart_real_model_research_audit",
+  "limitations": [
+    "The calibration upper bounds rely on IID Bernoulli per-slice errors and stationarity, neither established on this public dataset.",
+    "Disjoint question IDs may share articles, so cluster dependence can invalidate the nominal bound.",
+    "The independent gold answers are public, while this repository's grader is not externally audited.",
+    "The 128-character retrieval failure is a deliberate intervention, not spontaneous model drift.",
+    "Synthetic label flips are not real model outcomes; a no-alarm path is not proof of safety.",
+    "This unsigned research audit is not a deployment authorization or customer assurance certificate."
+  ],
+  "model": "distilbert/distilbert-base-cased-distilled-squad",
+  "model_revision": "564e9b582944a57a3e586bbb98fd6f0a4118db7f",
+  "rubric_id": "squad_v1.1_human_gold_normalized_f1_at_least_0.5_v1",
+  "same_questions_previous_50_percent_watch": {
+    "baseline_first_alarm": null,
+    "intervention_first_alarm": 111
+  },
+  "synthetic_label_flip_scenarios": [
+    {
+      "alarm": 63,
+      "calibration_ready": true,
+      "detection_delay": 38,
+      "flip_probability": 0.5,
+      "flipped": 43,
+      "kind": "synthetic_correct_to_error_label_flips",
+      "onset_after_observations": 25,
+      "pre_onset_alarm": false
+    },
+    {
+      "alarm": 38,
+      "calibration_ready": true,
+      "detection_delay": 13,
+      "flip_probability": 1.0,
+      "flipped": 88,
+      "kind": "synthetic_correct_to_error_label_flips",
+      "onset_after_observations": 25,
+      "pre_onset_alarm": false
+    },
+    {
+      "alarm": 103,
+      "calibration_ready": true,
+      "detection_delay": 48,
+      "flip_probability": 0.5,
+      "flipped": 27,
+      "kind": "synthetic_correct_to_error_label_flips",
+      "onset_after_observations": 55,
+      "pre_onset_alarm": false
+    },
+    {
+      "alarm": 67,
+      "calibration_ready": true,
+      "detection_delay": 12,
+      "flip_probability": 1.0,
+      "flipped": 61,
+      "kind": "synthetic_correct_to_error_label_flips",
+      "onset_after_observations": 55,
+      "pre_onset_alarm": false
+    },
+    {
+      "alarm": null,
+      "calibration_ready": true,
+      "detection_delay": null,
+      "flip_probability": 0.5,
+      "flipped": 16,
+      "kind": "synthetic_correct_to_error_label_flips",
+      "onset_after_observations": 85,
+      "pre_onset_alarm": false
+    },
+    {
+      "alarm": 98,
+      "calibration_ready": true,
+      "detection_delay": 13,
+      "flip_probability": 1.0,
+      "flipped": 33,
+      "kind": "synthetic_correct_to_error_label_flips",
+      "onset_after_observations": 85,
+      "pre_onset_alarm": false
+    }
+  ]
+}
