@@ -58,6 +58,15 @@ def render_dashboard(report: dict) -> str:
         lower = interval["lower_95"] * 100
         upper = interval["upper_95"] * 100
         improvement = direct["difference"] * 100
+        exact = direct.get("exact_mcnemar_descriptive")
+        exact_note = (
+            '<p class="sub">Discordant questions: baseline-only '
+            + str(exact["baseline_only"]) + ', challenger-only '
+            + str(exact["candidate_only"]) + '; exact paired p = '
+            + f'{exact["exact_two_sided_p"]:.4g}'
+            + '. Descriptive only: questions share paragraphs and articles.</p>'
+            if exact else ""
+        )
         direct_panel = (
             '<section class="panel"><div class="eyebrow">Direct full-information audit · independently annotated</div>'
             '<h2>Human-gold sentence retrieval</h2>'
@@ -71,7 +80,8 @@ def render_dashboard(report: dict) -> str:
             '<p>Exploratory article-cluster bootstrap 95% interval: <strong>'
             + f'{lower:+.2f} to {upper:+.2f}' + ' percentage points</strong>.</p>'
             '<p class="sub">Negative article-level domains flagged: '
-            + str(direct["negative_article_count"]) + '. This is sentence retrieval, not an LLM or general-agent test.</p></section>'
+            + str(direct["negative_article_count"]) + '. This is sentence retrieval, not an LLM or general-agent test.</p>'
+            + exact_note + '</section>'
         )
         stress_rows = "".join(
             "<tr><td>" + f'{item["requested_tv_budget"]*100:.0f}%' + "</td>"
