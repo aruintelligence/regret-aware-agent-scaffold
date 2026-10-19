@@ -602,3 +602,12 @@ The quorum endpoint is integrated with the existing **Sovereign Source Registry*
 ### Sovereign consent-risk-proof integration
 
 `sovereign_risk_adapter.py` composes the existing revocable, purpose-limited source registry, optional separately keyed revocation checkpoint, signed calibration risk policy, and independently verifiable source-offset certificate. Source authorization must succeed **before model inference**. A stale calibration policy can be rejected by pinning the expected calibration-set ID. A deliberate SQLite revocation-tail deletion is detected when a separately retained checkpoint is required. This is a local research prototype; operator-attested grants are not independently verified legal consent and the authorization check is not atomic with final delivery.
+
+
+## Anytime Risk Watch — prospectively detect model deterioration
+
+The opt-in [ANYTIME_RISK_WATCH.md](ANYTIME_RISK_WATCH.md) research module extends the signed static selective-risk gate with a **prospective sequential degradation monitor**. A predeclared fixed-mixture e-process watches independently graded binary errors, per trusted group and aggregate, under the conditional null that error probability never exceeds a fixed target. A familywise anytime alarm is raised when evidence of deterioration crosses a predeclared threshold. This uses established supermartingale mathematics; it is **not** proof of AI safety.
+
+`aru-watch observe` processes local ordered JSONL outcome records and signs an aggregate report; `aru-watch verify` validates the HMAC. The new `gate_with_risk_watch` requires both the static signed calibration and a separately signed watch report, a current independently expected outcome-stream digest, minimum group observations, an absence of alarms, and an independently verified source certificate. A stale signed report is rejected rather than silently replayed.
+
+The monitor is **not** automatically scheduled or deployed. An alarm requires human investigation; no alarm is not evidence of correctness. The sequential interpretation depends on complete prospective outcomes, predeclared groups and bets, correct labels, and a valid conditional null. No customer data or raw prompts are stored in the signed summary.
