@@ -42,8 +42,11 @@ Avoid first deploying into autonomous medical, financial eligibility, policing, 
 | Optional SHA-256 / HMAC evidence attestation | Implemented; not immutable storage |
 | Analytic-ground-truth Monte Carlo falsification | Implemented on synthetic data |
 | Python 3.9 / 3.12 continuous tests | Implemented |
-| Real task executor and independent customer grader | **Not implemented** |
-| Production API, multi-tenancy, SSO/RBAC, encryption, audit trail | **Not implemented** |
+| Real human-gold sentence-retrieval benchmark | Implemented and executed on 2,000 public SQuAD questions; **not an LLM** |
+| Optional OpenAI-compatible LLM executor | Implemented; local mock tested; **real model run not performed** |
+| Independent customer grader / customer outcomes | **Not implemented** |
+| Loopback-only SQLite/HMAC research ingestion gateway | Implemented; **not production certified** |
+| Production API, multi-tenancy, SSO/RBAC, encryption, retention controls | **Not implemented** |
 | Prospective external performance study | **Not performed** |
 | Security certification, compliance, enterprise SLA | **Not established** |
 
