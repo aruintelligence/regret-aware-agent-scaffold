@@ -39,6 +39,18 @@ jobs:
           aru-gateway --help > /dev/null
           aru-squad --help > /dev/null
           aru-llm-squad --help > /dev/null
+          aru-power --help > /dev/null
+      - name: Verify prospective pilot sample-size planner
+        run: |
+          aru-power --uplift 0.05 --discordance 0.25 --cluster-size 20 --icc 0.05 --missing 0.1 --grade-cost 1.5 --execution-cost 0.5 > /tmp/aru-pilot-plan.json
+          python - <<'PY'
+          import json
+          report = json.load(open("/tmp/aru-pilot-plan.json"))
+          assert report["requested_tasks_rounded_to_clusters"] >= report["labeled_pairs_required"]
+          assert report["cluster_design_effect"] > 1
+          assert report["estimated_task_execution_and_grading_cost"] > 0
+          print("Prospective pilot plan:", report["requested_tasks_rounded_to_clusters"], "tasks")
+          PY
       - name: Verify original scaffold benchmark
         run: python benchmark.py --runs 3 > /dev/null
       - name: Generate labeled synthetic evidence and HTML report
