@@ -38,7 +38,10 @@ def render_dashboard(report: dict) -> str:
         for row in segments[:20]
     )
     is_synthetic = report["label_source_counts"].get("synthetic", 0) > 0
-    badge = "SYNTHETIC DEMONSTRATION" if is_synthetic else "SELF-ATTESTED EXTERNAL LABELS"
+    is_human_gold = any("squad1.1_human_annotated" in kind for kind in report.get("runtime_kind", []))
+    badge = ("SYNTHETIC DEMONSTRATION" if is_synthetic else
+             "PUBLIC HUMAN-ANNOTATED BENCHMARK" if is_human_gold else
+             "SELF-ATTESTED EXTERNAL LABELS")
     status = "REVIEW SCREEN PASSED" if gate["candidate_for_human_review"] else "NOT CLEARED FOR REVIEW"
     reasons = "".join(f"<li>{escape(reason)}</li>" for reason in gate["reasons"])
     limitations = "".join(f"<li>{escape(reason)}</li>" for reason in report["limitations"])
@@ -73,6 +76,7 @@ ul{{padding-left:22px;color:var(--muted)}}li{{margin:7px 0}}footer{{color:var(--
 <div class="eyebrow" style="margin-top:34px">Research instrument · no deployment authorization</div>
 <h1>Measure decisions.<br><span style="color:var(--cyan)">Not mythology.</span></h1>
 <p class="lead">An auditable comparison of two routing policies using logged selection probabilities and independently supplied outcome scores. Statistical estimates are not proof of general intelligence.</p>
+{"<p class=\"notice\"><strong>Benchmark scope:</strong> SQuAD human-annotated sentence retrieval only. This does not measure LLM reasoning, complete question answering, or enterprise agent performance.</p>" if is_human_gold else ""}
 <span class="pill">{escape(badge)}</span>
 <div class="flow"><span>01 · Randomized route</span><span>→</span><span>02 · Logged probability</span><span>→</span><span>03 · Outcome label</span><span>→</span><span>04 · Counterfactual estimate</span><span>→</span><span>05 · Human review</span></div>
 <div class="grid">
