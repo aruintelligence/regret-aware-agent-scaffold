@@ -35,6 +35,7 @@ aru-squad = "squad_benchmark:main"
 aru-llm-squad = "llm_squad_benchmark:main"
 aru-local-model = "hf_local_server:main"
 aru-llm-paired = "llm_paired_audit:main"
+aru-ground = "grounding_contract:main"
 aru-power = "pilot_power:main"
 aru-anytime = "anytime_evidence:main"
 
@@ -63,6 +64,7 @@ py-modules = [
   "hf_local_server",
   "llm_squad_benchmark",
   "llm_paired_audit",
+  "grounding_contract",
   "evidence_gateway_store",
   "evidence_gateway",
 ]
