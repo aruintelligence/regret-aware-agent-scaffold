@@ -111,6 +111,10 @@ jobs:
           print("Candidate accuracy:", oracle["candidate_accuracy"])
           print("Direct difference:", oracle["difference"])
           print("Paired oracle interval:", oracle["paired_question_interval"])
+          print("Paragraph-cluster interval:", oracle["paired_paragraph_cluster_interval"])
+          print("Article-cluster interval:", oracle["paired_article_cluster_interval"])
+          print("Negative article domains:", oracle["negative_article_count"])
+          print("Off-policy absolute error:", report["full_information_crosscheck"]["absolute_estimator_error"])
           print("OPE SNIPS difference:", report["paired_difference"]["snips_difference"])
           print("Dataset SHA256:", oracle["dataset_sha256"])
           PY
