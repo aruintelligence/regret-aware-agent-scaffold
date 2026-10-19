@@ -68,3 +68,15 @@ The first 40-question randomized pilot was executed successfully and produced de
 **Follow-up design:** run *both* frozen prompt strategies on *each* of the 40 new public questions, in seeded randomized order; score both with human-gold token F1 and exact match only after generation. Aggregate the paired F1 difference and compute exploratory question-, paragraph- and article-cluster bootstrap intervals with 400 replicates. Do not archive raw passages, responses or answer text. A failed call leaves its question excluded from the complete-pair estimate, with the missingness count disclosed.
 
 **Follow-up integration criterion:** 80 model calls attempted, at least 36 complete matched pairs, at most 4 failed calls, no automatic rollout. There is **no preregistered minimum F1 improvement**; report negative or zero differences faithfully. This public dev-set follow-up was designed after observing the initial randomized pilot, so it is **not a fully independent hidden holdout** and should not be used for confirmatory claims.
+
+
+## Observed matched follow-up results (after execution)
+
+The disjoint **offset 40–79** follow-up ran successfully in [GitHub Actions run 39199142639](https://github.com/aruintelligence/regret-aware-agent-scaffold/actions/runs/39199142639): **80/80 actual model calls completed, yielding 40 complete matched question pairs**.
+
+- Direct concise prompt: **0.23535 mean token F1**.
+- Grounded-extractive prompt: **0.21502 mean token F1**.
+- Direct paired difference (grounded minus direct): **−0.02033 F1**, or **−2.03 percentage points**.
+- Exploratory article-cluster 95% bootstrap interval: **−5.75 to +1.75 percentage points**, 24 article clusters.
+
+**The more restrictive prompt did not improve F1 on these matched questions.** The interval spans zero; there is no demonstrated prompt advantage. The earlier 29-vs-11 random-arm result is not a substitute for a matched comparison. This negative result motivated a *different, narrower* product hypothesis: verifiable source provenance with transparent abstention, evaluated prospectively on a third disjoint public subset as specified in [GROUNDING_PROTOCOL.md](GROUNDING_PROTOCOL.md). The source gate does not claim to improve the underlying model's intelligence.
