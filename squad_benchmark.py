@@ -36,8 +36,8 @@ def paired_oracle_interval(pairs, *, replicates=1000, seed=13):
     n = len(pairs)
     deltas = []
     for _ in range(replicates):
-        deltas.append(sum(pairs[rng.randrange(n)][1] - pairs[rng.randrange(n)][0]
-                          for _ in range(n)) / n)
+        indices = [rng.randrange(n) for _ in range(n)]
+        deltas.append(sum(pairs[i][1] - pairs[i][0] for i in indices) / n)
     deltas.sort()
     def percentile(p):
         index = p * (len(deltas) - 1)
