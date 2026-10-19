@@ -192,7 +192,8 @@ def verify_watch_report(report, *, key):
 
 def gate_with_risk_watch(policy, *, policy_key, watch_report, watch_key,
                          score, group, source_proof, source_text,
-                         model_revision, rubric_id):
+                         model_revision, rubric_id,
+                         expected_outcomes_sha256=None, min_group_outcomes=1):
     """Require independently signed prospective monitoring before risk release.
 
     A report with no alarm is not evidence of safety; the calibrated
@@ -210,6 +211,24 @@ def gate_with_risk_watch(policy, *, policy_key, watch_report, watch_key,
         return {**deny, "reason": "watch_model_or_rubric_mismatch"}
     if group not in watch_report.get("groups", []):
         return {**deny, "reason": "unmonitored_group"}
+    # Require an independently expected digest of the COMPLETE current
+    # outcome stream. A valid HMAC alone cannot detect replay of an older
+    # alarm-free report. The caller must obtain this digest from a trusted
+    # separately controlled monitoring ledger, not from the report itself.
+    if (not isinstance(expected_outcomes_sha256, str)
+            or len(expected_outcomes_sha256) != 64
+            or not hmac.compare_digest(
+                expected_outcomes_sha256,
+                str(watch_report.get("ordered_outcomes_sha256", "")),
+            )):
+        return {**deny, "reason": "missing_or_stale_watch_checkpoint"}
+    if (isinstance(min_group_outcomes, bool) or not isinstance(min_group_outcomes, int)
+            or min_group_outcomes < 1):
+        return {**deny, "reason": "invalid_minimum_monitoring_support"}
+    group_evidence = watch_report.get("slices", {}).get(group)
+    if (not isinstance(group_evidence, dict)
+            or group_evidence.get("n_observed", 0) < min_group_outcomes):
+        return {**deny, "reason": "insufficient_recent_group_outcomes"}
     if watch_report.get("degradation_alarm") or any(
         slice_data.get("degradation_alarm")
         for slice_data in watch_report.get("slices", {}).values()
