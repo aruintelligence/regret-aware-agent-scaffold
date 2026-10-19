@@ -225,6 +225,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-if __name__ == "__main__":
+def main():
     arguments = build_parser().parse_args()
     arguments.handler(arguments)
+
+
+if __name__ == "__main__":
+    main()
