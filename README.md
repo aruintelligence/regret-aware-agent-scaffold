@@ -322,3 +322,27 @@ python3 -m http.server 8000 --bind 127.0.0.1 --directory docs
 ```
 
 This page is committed as source code only; GitHub Pages, DNS, and any public deployment have **not** been activated. Review product claims, trademarks, ownership and commercial terms before publishing.
+
+
+## Independent evidence checkpoint: detect a deleted audit-log tail
+
+**Security improvement:** an ordinary HMAC hash chain cannot detect a privileged attacker deleting the final records; the remaining chain still verifies. `evidence_checkpoint.py` closes that specific gap **relative to an independently retained checkpoint** by signing the current event count and head hash with a **separate key**. Verification checks both the complete gateway HMAC chain and the historical anchored prefix. Audit verification also rejects gaps in SQLite sequence numbers.
+
+```bash
+# Keep this distinct from ARU_GATEWAY_HMAC_KEY; store in a separate secret manager.
+export ARU_ANCHOR_HMAC_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+
+# Create once; copy this checkpoint to separately controlled storage.
+aru-gateway anchor --db experiment-data/gateway.db \
+  --checkpoint /path/to/independently-retained/checkpoint-001.json
+
+# Verify later. Exits nonzero on tampering, truncation, or wrong anchor key.
+aru-gateway verify-anchor --db experiment-data/gateway.db \
+  --checkpoint /path/to/independently-retained/checkpoint-001.json
+```
+
+The anchor is not a trusted timestamp, transparency service, WORM store, or third-party attestation. **Both the anchor and its secret must be protected independently of the SQLite database and gateway key.** A stolen anchor key can sign a forged checkpoint, and no checkpoint proves that newer, unanchored events were not deleted. The included regression tests intentionally delete the final SQLite event: the original HMAC chain still passes, while the independently anchored verifier correctly rejects the truncated database.
+
+### Exact paired evidence (independence-limited)
+
+The human-gold benchmark additionally reports an exact two-sided McNemar discordance test: the count of questions uniquely solved by the baseline versus those uniquely solved by the challenger. It uses exact integer binomial arithmetic, not an asymptotic approximation. Because SQuAD questions share paragraphs and articles, the independent-question assumption is violated; **this p-value is descriptive and must not be promoted as confirmatory significance**. Article-cluster bootstrap sensitivity intervals remain the more relevant reported dependence check.
