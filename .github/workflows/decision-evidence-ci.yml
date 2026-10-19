@@ -249,6 +249,39 @@ jobs:
             --endpoint http://127.0.0.1:1234/v1/chat/completions \
             --limit 40 --seed 20261018 --max-tokens 48 --timeout-s 90 \
             --acknowledge-model-calls
+      - name: Evaluate BOTH frozen prompts on a disjoint 40-question follow-up subset
+        run: |
+          python llm_paired_audit.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir real-model-report/paired-followup \
+            --model HuggingFaceTB/SmolLM2-135M-Instruct \
+            --endpoint http://127.0.0.1:1234/v1/chat/completions \
+            --limit 40 --offset 40 --seed 20261018 \
+            --max-tokens 48 --timeout-s 90 \
+            --acknowledge-model-calls
+      - name: Audit matched human-gold follow-up without claiming superiority
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("real-model-report/paired-followup/paired-report.json").read_text())
+          assert report["kind"] == "actual_open_weight_model_paired_public_human_gold_audit"
+          assert report["offset"] == 40 and report["limit"] == 40
+          assert report["n_requested_calls"] == 80
+          assert report["n_complete_pairs"] >= 36
+          assert report["n_failed_calls"] <= 4
+          assert not report["automatic_rollout_permitted"]
+          assert Path("real-model-report/paired-followup/paired-index.html").exists()
+          direct = report["direct"]
+          print("REAL-MODEL MATCHED FOLLOW-UP (exploratory, public dev set)")
+          print("Complete pairs:", report["n_complete_pairs"])
+          print("Direct prompt mean F1:", direct["baseline_mean_f1"])
+          print("Grounded extractive mean F1:", direct["candidate_mean_f1"])
+          print("Paired F1 difference:", direct["f1_difference"])
+          print("Article-cluster interval:", report["article_cluster_interval"])
+          print("Model calls completed:", report["n_completed_calls"])
+          print("No general intelligence or hidden-holdout claims.")
+          PY
       - name: Audit real-model provenance and outcome completeness
         run: |
           python - <<'PY'
@@ -290,5 +323,7 @@ jobs:
             real-model-report/health.json
             real-model-report/evaluation/index.html
             real-model-report/evaluation/report.json
+            real-model-report/paired-followup/paired-index.html
+            real-model-report/paired-followup/paired-report.json
           if-no-files-found: warn
           retention-days: 14
