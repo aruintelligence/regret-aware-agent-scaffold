@@ -230,3 +230,33 @@ python3 llm_squad_benchmark.py \
 The command refuses to make model requests unless `--acknowledge-model-calls` is supplied. By default only loopback endpoints are allowed. A remote endpoint additionally requires HTTPS and `--allow-remote`, which may incur third-party costs and transmit the SQuAD passage and question to that service. Optional API credentials are read from the `ARU_LLM_API_KEY` environment variable; never put API keys in command lines or repository files. Redirects are blocked to prevent escaping the chosen endpoint. The HTTP adapter enforces request timeouts, prompt/output limits, and a maximum of 500 requests per run. Each decision is logged *before* execution; failed model requests receive no fabricated outcome label.
 
 The repository CI tests the LLM HTTP contract with a local **mock server**. Those mock tests prove API plumbing, safety boundaries, and grading code; they do **not** prove any model's performance. A real LM Studio server/model is not available to GitHub Actions by default, so real model results must be produced and inspected by the operator. The SQuAD public dev set is not a hidden test and should not be used for post-hoc leaderboard claims.
+
+
+## Loopback-only Decision Evidence Gateway (research API)
+
+`evidence_gateway.py` provides a **local HTTP API** backed by SQLite WAL transactions and an optional HMAC-authenticated event hash chain. This is a step toward a deployable product, but it is **not an internet-facing service**: no TLS, user accounts, SSO/RBAC, multi-tenancy, consent verification, deletion/retention workflow, encryption at rest, or external security audit.
+
+```bash
+# Generate separate secrets securely; never commit them or paste into chat.
+export ARU_GATEWAY_API_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export ARU_GATEWAY_HMAC_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+
+# Start a loopback-only service.
+python3 evidence_gateway.py serve --db experiment-data/gateway.db --port 8765
+
+# In another terminal, POST a validated event:
+# Authorization: Bearer <ARU_GATEWAY_API_KEY>
+# X-ARU-Consent: research-opt-in
+# Content-Type: application/json
+# POST http://127.0.0.1:8765/v1/decisions
+# POST http://127.0.0.1:8765/v1/labels
+# GET  http://127.0.0.1:8765/v1/chain
+
+# Offline audit/export for the evaluation CLI:
+python3 evidence_gateway.py verify --db experiment-data/gateway.db
+python3 evidence_gateway.py export --db experiment-data/gateway.db \
+  --decisions experiment-data/gateway-decisions.jsonl \
+  --labels experiment-data/gateway-labels.jsonl
+```
+
+The service enforces API-key authentication, an explicit research opt-in header, strict schema allowlists that reject raw prompt fields, unique decision IDs, idempotent retries, label-to-decision references, and tamper-detection checks. Events are append-only at the API level; SQLite administrators and anyone holding the HMAC key can still alter or delete storage. An external trusted digest anchor, database backups, retention/deletion controls, authenticated user consent, and operational security are required before using real customer data. **Do not expose this HTTP server to the public internet.**
