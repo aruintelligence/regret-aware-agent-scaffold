@@ -24,6 +24,20 @@ class ExternalAdapterTests(unittest.TestCase):
             self.assertEqual(result["decision_id"], row["decision_id"])
             self.assertNotIn("prompt", row)
 
+    def test_greedy_target_is_highest_scoring_even_when_external_routes_unsorted(self):
+        from route_experiments import choose_policy_action
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / "external.jsonl")
+            log_instrumented_decision(
+                path, task_signature="design",
+                candidate_routes=[["short"], ["long", "route"]],
+                selected_route=["short"],
+                selection_probabilities=[0.5, 0.5],
+                predicted_scores=[0.2, 0.9],
+            )
+            row = load_decisions(path)[0]
+            self.assertEqual(choose_policy_action(row, "greedy"), row["candidates"][1]["action"])
+
     def test_rejects_invalid_probability_and_never_writes_it(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "external.jsonl"
