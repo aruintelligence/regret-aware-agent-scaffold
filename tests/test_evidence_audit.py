@@ -32,6 +32,23 @@ class EvidenceAuditTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 save_manifest(manifest, manifest_path)
 
+    def test_hmac_verifier_rejects_authentication_downgrade(self):
+        import json
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "demo"
+            demo(argparse.Namespace(out_dir=str(root), n=20, seed=8))
+            decisions = str(root / "decisions.synthetic.jsonl")
+            labels = str(root / "labels.synthetic.jsonl")
+            manifest_path = root / "attestation.json"
+            secret = b"test-only-hmac-secret-32-bytes-long"
+            manifest = build_manifest(decisions, labels, secret=secret)
+            manifest["authentication"] = "unsigned-checksums"
+            manifest.pop("hmac_sha256")
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            result = verify_manifest(str(manifest_path), decisions, labels, secret=secret)
+            self.assertFalse(result["verified"])
+            self.assertTrue(any("downgrade" in error for error in result["errors"]))
+
     def test_unsigned_manifest_is_not_presented_as_authenticated(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / "demo"
