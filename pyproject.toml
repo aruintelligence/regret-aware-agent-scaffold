@@ -73,6 +73,7 @@ py-modules = [
   "selective_risk_cli",
   "risk_qa_adapter",
   "selective_risk_validation",
+  "selective_risk_dashboard",
   "extractive_qa_engine",
   "qa_proof_benchmark",
   "qa_local_server",
