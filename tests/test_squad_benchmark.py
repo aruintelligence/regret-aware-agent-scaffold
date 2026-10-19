@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from squad_benchmark import paired_oracle_interval, run_benchmark
+from squad_benchmark import cluster_oracle_interval, paired_oracle_interval, run_benchmark
 from squad_sentence_retrieval import (
     gold_span_contained, idf_proximity_sentence, load_questions,
     overlap_sentence, segment_context,
@@ -61,6 +61,16 @@ class SquadSentenceTests(unittest.TestCase):
         self.assertEqual(interval["lower_95"], -1)
         self.assertEqual(interval["upper_95"], -1)
 
+    def test_cluster_bootstrap_preserves_whole_clusters(self):
+        groups = {"article_a": [(1, 0)] * 5, "article_b": [(0, 1)] * 5}
+        interval = cluster_oracle_interval(groups, replicates=100, seed=7)
+        self.assertEqual(interval["clusters"], 2)
+        self.assertGreaterEqual(interval["lower_95"], -1)
+        self.assertLessEqual(interval["upper_95"], 1)
+        constant = cluster_oracle_interval({"one": [(0, 1)] * 10}, replicates=100)
+        self.assertEqual(constant["lower_95"], 1)
+        self.assertEqual(constant["upper_95"], 1)
+
     def test_benchmark_generates_real_gold_labels_without_llm_claims(self):
         with tempfile.TemporaryDirectory() as folder:
             dataset = Path(folder) / "dev.json"
@@ -71,6 +81,8 @@ class SquadSentenceTests(unittest.TestCase):
             self.assertEqual(report["n_labeled"], 24)
             self.assertEqual(report["label_source_counts"]["external"], 24)
             self.assertEqual(report["external_benchmark"]["n_evaluated"], 24)
+            self.assertEqual(report["external_benchmark"]["paired_article_cluster_interval"]["clusters"], 1)
+            self.assertEqual(report["external_benchmark"]["paired_paragraph_cluster_interval"]["clusters"], 1)
             self.assertFalse(report["review_gate"]["automatic_rollout_permitted"])
             self.assertTrue((out / "index.html").exists())
             self.assertEqual(len((out / "decisions.benchmark.jsonl").read_text().splitlines()), 24)
