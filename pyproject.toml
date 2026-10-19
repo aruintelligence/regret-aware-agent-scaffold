@@ -37,6 +37,7 @@ py-modules = [
   "benchmark",
   "off_policy_evaluation",
   "anytime_evidence",
+  "experiment_protocol",
   "route_experiments",
   "evidence_lab",
   "crossfit_diagnostics",

@@ -83,8 +83,14 @@ The synthetic generator intentionally assigns different success probabilities to
 **Actual decision logging (no fabricated outcome labels)**
 
 ```bash
+# Lock the policy pair, rubric and analysis thresholds before collecting data.
+python3 experiment_cli.py lock-protocol \
+  --protocol experiment-data/protocol.json --study-id pilot-001 \
+  --baseline-policy greedy --candidate-policy shortest --rubric-id rubric-v1
+# Publish the printed SHA-256 digest to an independent, timestamped location.
+
 # Create prompts.txt yourself, with one non-sensitive task per line.
-python3 experiment_cli.py collect --prompts prompts.txt --decisions experiment-data/decisions.jsonl --epsilon 0.25 --seed 7
+python3 experiment_cli.py collect --prompts prompts.txt --decisions experiment-data/decisions.jsonl --epsilon 0.25 --seed 7 --protocol experiment-data/protocol.json
 
 # Independently evaluate a completed route with a preregistered rubric.
 # Replace DECISION_ID with the ID printed by collect.
@@ -93,15 +99,17 @@ python3 experiment_cli.py label \
   --labels experiment-data/labels.jsonl \
   --decision-id DECISION_ID --reward 0.8 \
   --grader external-evaluator-1 --rubric-id rubric-v1 \
-  --source-kind external
+  --source-kind external --protocol experiment-data/protocol.json
 
 python3 experiment_cli.py evaluate \
   --decisions experiment-data/decisions.jsonl \
   --labels experiment-data/labels.jsonl \
-  --baseline-policy greedy --candidate-policy shortest \
+  --protocol experiment-data/protocol.json \
   --report-json experiment-data/report.json \
   --report-html experiment-data/index.html
 ```
+
+Every decision records the canonical protocol digest. Evaluation rejects a different policy pair, analysis threshold, or rubric. Legacy logs still produce an exploratory report, but they cannot pass the human-review screen without a decision-bound protocol. Hash consistency **does not prove timing**: an independent publication or witness must establish that the protocol existed before outcomes were observed. The [protocol guide](PROTOCOL.md) covers verification and the limits of this safeguard.
 
 The `collect` command uses an opt-in `ExperimentRuntime` with **one specialist route per task and no retries**. The original `MasterAgentRuntime` remains unchanged. This matters: assigning a final outcome to one action would be misleading if a later retry changed the result. The logged action is chosen with epsilon-greedy randomization, and the stored propensity is validated against the logged candidate set. No raw prompt, name, or user ID is written to the decision log. Task signatures and routes may still reveal information; use non-sensitive inputs and appropriate data retention policies.
 
@@ -112,9 +120,9 @@ The `collect` command uses an opt-in `ExperimentRuntime` with **one specialist r
 - **ESS:** effective sample size, warning of weak support even when the log is large.
 - **Paired bootstrap difference:** the candidate minus baseline SNIPS on the *same resampled tasks*. The percentile interval is exploratory and assumes independent observations.
 - **Time-uniform IPS lower bound:** a conservative one-sided bound for a fixed, preselected pair of policies on the logged contexts. It uses the full epsilon-greedy or categorical action distribution and remains valid at a chosen stopping time with adaptive logging under the stated conditional-randomization assumptions. It is unavailable when any logged outcome is missing. See [derivation and limits](ANYTIME_EVIDENCE.md).
-- **Conservative human-review screen:** checks sample size, complete labels, overlap, ESS, weight clipping, label provenance, and whether the exploratory lower interval exceeds a specified uplift. **It never authorizes automatic policy rollout.**
+- **Conservative human-review screen:** requires a matching decision-bound analysis protocol and checks sample size, complete labels, overlap, ESS, weight clipping, label provenance, and both lower bounds. **It never authorizes automatic policy rollout.**
 
-Available deterministic candidate policies are `greedy` (original highest-score route), `shortest` (fewest nodes), and `evidence_first` (first route containing the evidence node, otherwise greedy). The baseline and candidate policies must be chosen *before* collecting outcomes to avoid selection bias. This implementation does not learn a new production policy from its own internal quality score.
+Available deterministic candidate policies are `greedy` (highest-score route), `shortest` (fewest nodes), `evidence_first` (highest-scored route containing the evidence node, otherwise greedy), plus explicit `first_candidate` and `second_candidate` for controlled benchmarks. The baseline and candidate policies must be chosen *before* collecting outcomes to avoid selection bias. This implementation does not learn a new production policy from its own internal quality score.
 
 **Scientific and engineering limits**
 

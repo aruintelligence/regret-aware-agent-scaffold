@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 import random
+import re
 import time
 import uuid
 from pathlib import Path
@@ -100,6 +101,9 @@ def validate_decision(row: dict) -> None:
         raise ValueError("decision_id is required")
     if not isinstance(row.get("task_signature"), str) or not row["task_signature"]:
         raise ValueError("task_signature is required")
+    if "protocol_sha256" in row and (not isinstance(row["protocol_sha256"], str) or
+                                     not re.fullmatch(r"[0-9a-f]{64}", row["protocol_sha256"])):
+        raise ValueError("invalid experiment protocol digest")
     candidates = row.get("candidates")
     if not isinstance(candidates, list) or not candidates:
         raise ValueError("candidate routes are required")
@@ -137,6 +141,14 @@ def load_decisions(path: str) -> List[dict]:
     return rows
 
 
+def ensure_log_protocol(path: str, protocol_sha256: Optional[str]) -> None:
+    """Fail before execution if an existing log has a different plan binding."""
+    if not Path(path).exists():
+        return
+    if any(row.get("protocol_sha256") != protocol_sha256 for row in load_decisions(path)):
+        raise ValueError("existing decision log uses a different experiment protocol")
+
+
 def choose_policy_action(row: dict, policy: str) -> str:
     """Deterministic policies defined entirely from pre-decision candidates."""
     candidates = row["candidates"]
@@ -168,7 +180,8 @@ class ExperimentPlannerNode(PlannerNode):
     """Epsilon-greedy selection with known probabilities and private log."""
 
     def __init__(self, memory: RouteMemory, decisions_path: str,
-                 epsilon: float = 0.25, seed: Optional[int] = None):
+                 epsilon: float = 0.25, seed: Optional[int] = None,
+                 protocol_sha256: Optional[str] = None):
         super().__init__(memory)
         if not isinstance(epsilon, (int, float)) or not math.isfinite(epsilon) or not 0 < epsilon <= 1:
             raise ValueError("epsilon must be in (0,1]")
@@ -177,6 +190,8 @@ class ExperimentPlannerNode(PlannerNode):
         self.decisions_path = decisions_path
         self.epsilon = float(epsilon)
         self.rng = random.Random(seed)
+        self.protocol_sha256 = protocol_sha256
+        ensure_log_protocol(decisions_path, protocol_sha256)
 
     def process(self, state):
         outputs, delta, recommendations, confidence, complexity = super().process(state)
@@ -209,6 +224,8 @@ class ExperimentPlannerNode(PlannerNode):
             "runtime_kind": "scripted_scaffold",
             "loop_count": state.route.loop_count,
         }
+        if self.protocol_sha256 is not None:
+            record["protocol_sha256"] = self.protocol_sha256
         validate_decision(record)
         # Fail closed: a route is not executed without a logged propensity.
         append_jsonl(self.decisions_path, record)
@@ -233,10 +250,14 @@ class ExperimentRuntime(MasterAgentRuntime):
     """One-route experimental runtime; regular MasterAgentRuntime is unchanged."""
 
     def __init__(self, decisions_path: str, epsilon: float = 0.25,
-                 seed: Optional[int] = None, memory: Optional[RouteMemory] = None):
+                 seed: Optional[int] = None, memory: Optional[RouteMemory] = None,
+                 protocol_path: Optional[str] = None):
+        from experiment_protocol import load_protocol, protocol_digest
+        digest = protocol_digest(load_protocol(protocol_path)) if protocol_path else None
         super().__init__(memory=memory)
         self.nodes["planner_node"] = ExperimentPlannerNode(
             self.memory, decisions_path, epsilon=epsilon, seed=seed,
+            protocol_sha256=digest,
         )
 
     def new_state(self, user_input: str, session_id: str = "default"):

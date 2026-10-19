@@ -14,6 +14,7 @@ from typing import Dict, List, Optional
 
 from off_policy_evaluation import Decision, estimate
 from anytime_evidence import anytime_ips_lower_bound
+from experiment_protocol import check_protocol_binding, load_protocol
 from crossfit_diagnostics import crossfit_dr, segment_diagnostics
 from route_experiments import (
     append_jsonl, choose_policy_action, load_decisions, read_jsonl,
@@ -128,7 +129,8 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
                         replicates: int = 1000, seed: int = 7,
                         max_weight: float = 20.0,
                         min_labeled: int = 200, min_ess: float = 30.0,
-                        min_uplift: float = 0.02) -> dict:
+                        min_uplift: float = 0.02,
+                        protocol_path: Optional[str] = None) -> dict:
     if candidate_policy not in ("greedy", "shortest", "evidence_first", "first_candidate", "second_candidate"):
         raise ValueError("unsupported candidate policy")
     if baseline_policy not in ("greedy", "shortest", "evidence_first", "first_candidate", "second_candidate"):
@@ -145,6 +147,15 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
     unknown = set(labels) - ids
     if unknown:
         raise ValueError("labels refer to unknown decision IDs")
+    protocol_binding = (check_protocol_binding(
+        load_protocol(protocol_path), decisions, labels,
+        baseline_policy=baseline_policy, candidate_policy=candidate_policy,
+        replicates=replicates, seed=seed, max_weight=max_weight,
+        min_labeled=min_labeled, min_ess=min_ess, min_uplift=min_uplift,
+    ) if protocol_path else {
+        "status": "unbound_exploratory", "sha256": None,
+        "warning": "No decision-bound analysis protocol was supplied; policy selection after outcomes cannot be excluded.",
+    })
     rows = [{"decision": row, "label": labels[row["decision_id"]]}
             for row in decisions if row["decision_id"] in labels]
     if not rows:
@@ -188,6 +199,8 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
 
     # Advisory review gate only; never silently change production policy.
     reasons = []
+    if protocol_binding["status"] != "decision_bound_self_attested":
+        reasons.append("No decision-bound analysis protocol; review requires a fixed policy pair and rubric")
     if len(rows) < min_labeled:
         reasons.append(f"Only {len(rows)} labeled tasks; require {min_labeled}")
     if len(rows) != len(decisions):
@@ -222,6 +235,7 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
         "n_labeled": len(rows),
         "n_unlabeled": len(decisions) - len(rows),
         "label_source_counts": source_counts,
+        "protocol_binding": protocol_binding,
         "distinct_graders": grader_count,
         "observed_action_counts": dict(Counter(row["action"] for row in decisions)),
         "baseline": baseline,
@@ -244,6 +258,7 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
             "SNIPS is generally biased at finite samples; clipped IPS is also biased.",
             "The percentile bootstrap assumes independent tasks and may be invalid for adaptive or clustered logs.",
             "The time-uniform bound permits adaptive logging under conditional randomization, complete bounded labels, and a fixed policy pair chosen before inspecting rewards; it does not cover post-hoc policy selection or future tasks.",
+            "A matching protocol digest checks consistency, not when the protocol was created; independent publication or a trusted witness is needed to establish prospective registration.",
             "Cross-fitted DR uses a coarse shrinkage reward model; it is a diagnostic, not a validated outcome predictor.",
             "Segment-level harm checks are exploratory, may be noisy, and are not demographic fairness assessments.",
             "Evaluation uses only observed contexts and cannot establish performance under distribution shift.",
