@@ -23,7 +23,7 @@ The ĀRU benchmark compared **two actual dependency-free sentence-retrieval algo
 
 Each interval used 400 seeded bootstrap replicates. These are exploratory percentile intervals, **not confirmatory inference**, and they do not correct for all benchmark-selection, annotation, or modeling biases.
 
-**Domain-level caution:** the full-information audit found **one article with a material negative challenger result** under the preregistered-in-code screen (at least 20 examples and more than 5 percentage points worse). The system blocks advancement to the human-review screen until that regression is investigated. An aggregate win is not universal superiority.
+**Domain-level caution:** the full-information audit found **one article with a material negative challenger result** under the preregistered-in-code screen (at least 20 examples and more than 5 percentage points worse). The affected article is **Victoria_(Australia)** (25 questions): baseline **72%**, challenger **64%**, a decline of **8 percentage points**. The system blocks advancement to the human-review screen until that regression is investigated. An aggregate win is not universal superiority. This small subgroup difference is exploratory and may be noisy.
 
 ### Off-policy estimator check
 
