@@ -18,6 +18,11 @@ class EndpointError(RuntimeError):
     pass
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise EndpointError("redirects are disabled to prevent endpoint escape")
+
+
 def validate_endpoint(endpoint: str, *, allow_remote: bool = False) -> str:
     parsed = urlsplit(endpoint)
     if parsed.username or parsed.password or parsed.fragment or parsed.query:
@@ -65,7 +70,8 @@ def run_chat(messages, *, model: str, endpoint: str = "http://127.0.0.1:1234/v1/
         headers=headers, method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
+        opener = urllib.request.build_opener(_NoRedirect)
+        with opener.open(request, timeout=timeout_s) as response:
             if response.status != 200:
                 raise EndpointError("model endpoint returned non-200 status")
             # Bound response size to avoid accidental unbounded memory use.
