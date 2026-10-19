@@ -128,8 +128,23 @@ def make_server(db_path, api_key, hmac_key, *, host="127.0.0.1", port=8765):
 def build_report_from_gateway(db_path, out_dir, *, hmac_key,
                               baseline_policy="greedy",
                               candidate_policy="shortest",
-                              replicates=300):
-    """Export, evaluate, visualize and attest consented research events."""
+                              replicates=300,
+                              anchor_checkpoint=None, anchor_key=None):
+    """Export, evaluate, visualize and attest consented research events.
+
+    When an external checkpoint is provided, reject any truncated/replaced
+    history BEFORE producing a report.
+    """
+    anchor_result = None
+    if anchor_checkpoint is not None:
+        if anchor_key is None:
+            raise ValueError("independent anchor key required with checkpoint")
+        anchor_result = verify_checkpoint(
+            db_path, anchor_checkpoint,
+            gateway_key=hmac_key, anchor_key=anchor_key,
+        )
+        if not anchor_result["verified"]:
+            raise RuntimeError("independent audit checkpoint verification failed")
     target = Path(out_dir)
     target.mkdir(parents=True, exist_ok=True)
     decisions = str(target / "decisions.jsonl")
@@ -149,6 +164,7 @@ def build_report_from_gateway(db_path, out_dir, *, hmac_key,
     report["source"] = {
         "kind": "consented_local_gateway",
         "audit_verified_before_export": True,
+        "independent_checkpoint_verified": bool(anchor_result),
         "note": "Local HMAC audit does not authenticate real-world truth of outcomes.",
     }
     report_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -183,6 +199,8 @@ def main():
     report.add_argument("--baseline-policy", default="greedy")
     report.add_argument("--candidate-policy", default="shortest")
     report.add_argument("--replicates", type=int, default=300)
+    report.add_argument("--anchor-checkpoint",
+                        help="Require verification against independently retained checkpoint")
     anchor = sub.add_parser("anchor", help="Write independently signed audit checkpoint")
     anchor.add_argument("--db", required=True)
     anchor.add_argument("--checkpoint", required=True)
@@ -224,6 +242,9 @@ def main():
             baseline_policy=args.baseline_policy,
             candidate_policy=args.candidate_policy,
             replicates=args.replicates,
+            anchor_checkpoint=args.anchor_checkpoint,
+            anchor_key=_load_secret("ARU_ANCHOR_HMAC_KEY", 32)
+            if args.anchor_checkpoint else None,
         ), indent=2))
     else:
         print(json.dumps(export_jsonl(args.db, args.decisions, args.labels,
