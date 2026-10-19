@@ -182,3 +182,30 @@ python3 scientific_validation.py --trials 40 --n 900 --seed 7 --json validation.
 ```
 
 This is a genuine, falsifiable **software/statistics test**, but it is **not evidence of a better real-world AI**: the reward-generating distribution is artificial, the tasks are scripted, and no independent customer outcomes are used. Passing such a test means the estimators behave plausibly on this specified environment. The next scientific milestone is a prospective, externally graded, held-out evaluation on real tasks with an agreed baseline and budget.
+
+
+## Human-annotated, independently scored retrieval benchmark
+
+The `squad_benchmark.py` experiment moves beyond synthetic rewards to **actual retrieval decisions** scored against independently published human annotations from the [Stanford SQuAD v1.1 development dataset](https://rajpurkar.github.io/SQuAD-explorer/). The dataset is CC BY-SA 4.0 and **is not included in this repository**.
+
+Two fixed, dependency-free algorithms see the same **question and source passage, but never the annotated answers**:
+
+- **Baseline:** lexical question/sentence overlap normalized for sentence length.
+- **Challenger:** sentence-level BM25/IDF with query coverage, token proximity, and a modest numeric-question cue.
+
+The outcome is 1 if the selected sentence **fully contains a human-annotated answer span** and 0 otherwise. This is a legitimate sentence-retrieval benchmark, **not a complete QA system, an LLM benchmark, or proof of agent intelligence**. Both routes run on each question for a direct *full-information audit*. Separately, a 50/50 randomized logging policy reveals only the selected route's reward to the off-policy evaluator. The report compares off-policy estimates with the directly observable true policy difference on the same fixed benchmark questions.
+
+```bash
+# Download from Stanford (dataset not redistributed by ĀRU):
+curl -fL https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json -o dev-v1.1.json
+
+# Reproducible evaluation of a fixed hash-selected 2,000-question subset:
+python3 squad_benchmark.py --dataset dev-v1.1.json \
+  --out-dir benchmark-report --limit 2000 --seed 20261018 --replicates 400
+# View benchmark-report/index.html
+# Inspect benchmark-report/oracle.json for full-information scores.
+```
+
+GitHub Actions workflow `squad-human-gold.yml` downloads the official dataset during the run, prints its SHA-256, executes the benchmark, and uploads only the resulting reports. The raw dataset is not committed or archived. Benchmark labels derive from human-annotated answer offsets, but the grading implementation is ours and must be independently audited before claims about performance. The SQuAD *development* set is public; these are reproducible exploratory measurements, **not hidden-test leaderboard results**. Any later tuning on the same data invalidates treating that data as an untouched holdout.
+
+The strongest scientific claim supported by this benchmark is about the **specific sentence retrieval algorithms on the specific annotated task**. It does not prove a general improvement in the underlying Divine Whisper scripted agent, nor does it establish a commercial product.
