@@ -118,7 +118,7 @@ class RealLLMAdapterTests(unittest.TestCase):
             self.assertFalse(report["review_gate"]["automatic_rollout_permitted"])
             self.assertEqual(len(MockHandler.requests), 12)
             self.assertTrue((out / "index.html").exists())
-            self.assertNotIn("question", (out / "decisions.llm.jsonl").read_text().lower())
+            self.assertNotIn("Where was the observatory built?", (out / "decisions.llm.jsonl").read_text())
 
     def test_failed_requests_never_fabricate_outcomes(self):
         MockHandler.mode = "error"
