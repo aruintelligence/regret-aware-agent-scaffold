@@ -587,3 +587,18 @@ The new [Evidence Quorum research module](EVIDENCE_QUORUM.md) addresses a weakne
 ### Revocable multi-document authorization
 
 The quorum endpoint is integrated with the existing **Sovereign Source Registry**. Before processing any of 2–4 documents, ĀRU verifies that every exact source has an active `qa_source` grant for the requesting owner. It checks all grants **again after inference** so a mid-request revocation blocks the answer. The deterministic `quorum_registry_adapter.py` also rejects duplicate source IDs and returns a reproducible, source-fingerprint-based agreement or conflict receipt. The source registry records operator attestations, not independently verified legal consent; revocation cannot be atomic with an HTTP response. See [EVIDENCE_QUORUM.md](EVIDENCE_QUORUM.md).
+
+## Selective Risk Gate — calibrated abstention with independent source evidence (research alpha)
+
+**New independent engineering branch:** [SELECTIVE_RISK_GATE.md](SELECTIVE_RISK_GATE.md) documents a risk-aware release policy that addresses a limitation of source citations: a verified source span can still be the wrong answer.
+
+`selective_risk_gate.py` evaluates independently labeled calibration examples, computes **exact one-sided binomial upper bounds**, and applies **Bonferroni simultaneous correction** across predeclared score thresholds and trusted task groups. It chooses the widest-coverage threshold only when every group and the aggregate satisfy a specified error target with sufficient support. Otherwise it **abstains**. The policy is HMAC-signed, bound to an immutable model revision and rubric, and combined with independent SHA-256 source-offset verification. `risk_qa_adapter.py` connects the policy to the existing specialized extractive QA model's raw logit score.
+
+`aru-risk` provides `fit`, `verify`, and `check` commands. `selective_risk_validation.py` runs reproducible known-truth Monte Carlo falsification, and dedicated tests exercise tampering, domain regressions, missing groups, insufficient support, model mismatch and source-proof failures.
+
+**No production reliability guarantee is claimed.** The confidence interpretation requires IID representative calibration and future tasks, predeclared thresholds/groups, correct independent labels, fixed model and rubric, and trusted group assignment. The system does not correct a wrong source, prevent distribution shift, or automatically authorize rollout. Its value is in **measuring and exposing uncertainty before displaying an answer**.
+
+
+### Sovereign consent-risk-proof integration
+
+`sovereign_risk_adapter.py` composes the existing revocable, purpose-limited source registry, optional separately keyed revocation checkpoint, signed calibration risk policy, and independently verifiable source-offset certificate. Source authorization must succeed **before model inference**. A stale calibration policy can be rejected by pinning the expected calibration-set ID. A deliberate SQLite revocation-tail deletion is detected when a separately retained checkpoint is required. This is a local research prototype; operator-attested grants are not independently verified legal consent and the authorization check is not atomic with final delivery.
