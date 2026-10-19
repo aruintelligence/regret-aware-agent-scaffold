@@ -48,6 +48,7 @@ py-modules = [
   "paired_inference",
   "pilot_power",
   "anytime_evidence",
+  "sequential_validation",
   "experiment_cli",
   "external_adapter",
   "scientific_validation",
