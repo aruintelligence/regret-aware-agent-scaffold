@@ -30,6 +30,7 @@ aru-evidence = "experiment_cli:main"
 aru-gateway = "evidence_gateway:main"
 aru-squad = "squad_benchmark:main"
 aru-llm-squad = "llm_squad_benchmark:main"
+aru-power = "pilot_power:main"
 
 [tool.setuptools]
 py-modules = [
@@ -44,6 +45,7 @@ py-modules = [
   "evidence_audit",
   "evidence_checkpoint",
   "paired_inference",
+  "pilot_power",
   "experiment_cli",
   "external_adapter",
   "scientific_validation",
