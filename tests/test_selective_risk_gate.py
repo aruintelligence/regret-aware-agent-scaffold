@@ -164,6 +164,8 @@ class SelectiveRiskTests(unittest.TestCase):
             ({"model_revision": "new-model"}, "model_or_rubric_mismatch"),
             ({"source_text": source + " changed"}, "invalid_source_certificate"),
             ({"source_proof": None}, "invalid_source_certificate"),
+            ({"source_proof": ground_answer("Oregon", source, model_revision="other-model")},
+             "source_proof_model_mismatch"),
         ):
             with self.subTest(change=change):
                 outcome = apply_selective_risk_gate(signed, **{**kwargs, **change})
