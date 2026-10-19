@@ -45,3 +45,15 @@ footer{border-top:1px solid var(--line);padding:30px 0 45px;display:flex;justify
 .consent-indicator.revoked{background:#f5b4a4;box-shadow:0 0 0 5px #f5b4a426}
 .consent-label{font-size:10px;font-weight:850;letter-spacing:.12em;color:var(--gold)}
 @media(max-width:900px){.sovereignty-panel{grid-template-columns:1fr}}
+
+/* Multi-source evidence quorum: contrasting approved agreement and conflict */
+.quorum-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:35px 0}
+.quorum-card{border:1px solid var(--line);background:linear-gradient(150deg,#142f42,#0e2033);border-radius:20px;padding:29px}
+.quorum-tag{font-size:12px;font-weight:800;letter-spacing:.13em;color:var(--aqua)}
+.quorum-source{display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid var(--line);padding:17px 0}
+.quorum-source span{font-size:13px;color:var(--muted)}
+.quorum-source strong{font-size:22px;letter-spacing:-.03em}
+.quorum-outcome{margin:24px 0 13px;padding:13px 17px;border-radius:10px;font-weight:750;font-size:14px}
+.quorum-outcome.positive{border:1px solid #398379;background:#153f3d;color:#9df4e7}
+.quorum-outcome.caution{border:1px solid #8d6a43;background:#3b2e20;color:#f8d7a0}
+@media(max-width:700px){.quorum-grid{grid-template-columns:1fr}.quorum-card{padding:21px}}

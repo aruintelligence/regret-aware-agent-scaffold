@@ -206,7 +206,7 @@ jobs:
     name: Real open-weight LLM · public human-gold QA
     if: github.event_name == 'pull_request' && github.event.pull_request.number == 2
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     needs: test
     steps:
       - uses: actions/checkout@v4
@@ -362,45 +362,6 @@ jobs:
           print("Gated paired difference:", gate["f1_difference"])
           print("These are public dev-set provenance metrics, NOT proof of factual truth.")
           PY
-      - name: Evaluate real pretrained extractive QA model vs real small LLM on disjoint 80-question sample
-        run: |
-          mkdir -p real-model-report/extractive-qa
-          sha256sum EXTRACTIVE_QA_PROTOCOL.md > real-model-report/extractive-qa-protocol.sha256
-          python qa_proof_benchmark.py \
-            --dataset benchmark-data/dev-v1.1.json \
-            --out-dir real-model-report/extractive-qa \
-            --qa-model distilbert/distilbert-base-cased-distilled-squad \
-            --llm-model HuggingFaceTB/SmolLM2-135M-Instruct \
-            --llm-endpoint http://127.0.0.1:1234/v1/chat/completions \
-            --limit 80 --offset 120 --seed 20261018 \
-            --max-tokens 48 --timeout-s 90 \
-            --acknowledge-model-calls
-      - name: Audit source-backed coverage and real QA model quality
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          r = json.loads(Path("real-model-report/extractive-qa/report.json").read_text())
-          assert r["kind"] == "real_pretrained_extractive_qa_vs_small_llm_public_dev"
-          assert r["offset"] == 120 and r["limit"] == 80
-          assert r["qa_revision"], "real QA model revision must be recorded"
-          assert r["gold_answers_visible_to_models"] is False
-          assert r["n_complete_pairs"] >= 72
-          assert r["arms"]["qa"]["accepted"] >= 72
-          assert r["arms"]["qa"]["completed"] >= 72
-          assert not r["automatic_rollout_permitted"]
-          assert Path("real-model-report/extractive-qa/index.html").exists()
-          print("REAL EXTRACTIVE QA vs REAL SMALL LLM (PUBLIC SQuAD DEV)")
-          print("Specialized model:", r["qa_model"], "revision:", r["qa_revision"])
-          print("Matched questions:", r["n_complete_pairs"], "failures:", r["failures"])
-          for name, arm in r["arms"].items():
-              print("ARM", name, "coverage:", arm["accepted_fraction"],
-                    "mean F1:", arm["mean_f1"], "exact match:", arm["exact_match"],
-                    "latency:", arm["mean_latency_s"])
-          print("Paired QA minus LLM F1:", r["direct_qa_minus_raw_llm_f1"])
-          print("Article-cluster exploratory interval:", r["article_cluster_interval"])
-          print("Task-specific pretrained extractive model; not general AI superiority.")
-          PY
       - name: Audit real-model provenance and outcome completeness
         run: |
           python - <<'PY'
@@ -440,7 +401,6 @@ jobs:
             real-model-report/model.json
             real-model-report/protocol.sha256
             real-model-report/grounding-protocol.sha256
-            real-model-report/extractive-qa-protocol.sha256
             real-model-report/health.json
             real-model-report/evaluation/index.html
             real-model-report/evaluation/report.json
@@ -448,7 +408,101 @@ jobs:
             real-model-report/paired-followup/paired-report.json
             real-model-report/proof-carrying-answers/paired-index.html
             real-model-report/proof-carrying-answers/paired-report.json
-            real-model-report/extractive-qa/index.html
-            real-model-report/extractive-qa/report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  specialized_qa:
+    name: Specialized real QA · independent source-proof benchmark
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 2
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU-only pretrained model runtime
+        run: |
+          python -m pip install --disable-pip-version-check torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check transformers==4.48.3 safetensors==0.5.3
+      - name: Fetch and verify official human-annotated dataset
+        run: |
+          mkdir -p benchmark-data specialized-qa-report
+          curl --fail --location --show-error --silent --retry 3 --max-time 120 https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json --output benchmark-data/dev-v1.1.json
+          echo "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9  benchmark-data/dev-v1.1.json" | sha256sum --check
+          sha256sum EXTRACTIVE_QA_PROTOCOL.md > specialized-qa-report/protocol.sha256
+      - name: Start real generative comparator on loopback
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+          TOKENIZERS_PARALLELISM: 'false'
+        run: |
+          python hf_local_server.py --model HuggingFaceTB/SmolLM2-135M-Instruct --threads 2 --port 1234 --metadata-json specialized-qa-report/generative-model.json > specialized-qa-server.log 2>&1 &
+          echo $! > /tmp/aru-qa-llm.pid
+          for i in $(seq 1 150); do
+            if curl -fsS --max-time 2 http://127.0.0.1:1234/health > specialized-qa-report/health.json; then
+              echo "Genuine comparator model loaded"
+              break
+            fi
+            if ! kill -0 "$(cat /tmp/aru-qa-llm.pid)" 2>/dev/null; then
+              tail -n 80 specialized-qa-server.log
+              exit 1
+            fi
+            sleep 2
+          done
+          test -s specialized-qa-report/health.json || { tail -n 80 specialized-qa-server.log; exit 1; }
+      - name: Run real specialized extractive QA and real generative comparator
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+          TOKENIZERS_PARALLELISM: 'false'
+        run: |
+          python qa_proof_benchmark.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir specialized-qa-report/evaluation \
+            --qa-model distilbert/distilbert-base-cased-distilled-squad \
+            --llm-model HuggingFaceTB/SmolLM2-135M-Instruct \
+            --llm-endpoint http://127.0.0.1:1234/v1/chat/completions \
+            --limit 80 --offset 120 --seed 20261018 \
+            --max-tokens 48 --timeout-s 90 \
+            --acknowledge-model-calls
+      - name: Verify real-model revisions, independent scoring and source coverage
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("specialized-qa-report")
+          report = json.loads((root / "evaluation/report.json").read_text())
+          provenance = json.loads((root / "generative-model.json").read_text())
+          assert report["kind"] == "real_pretrained_extractive_qa_vs_small_llm_public_dev"
+          assert report["offset"] == 120 and report["limit"] == 80
+          assert report["qa_revision"] and provenance["revision"]
+          assert report["gold_answers_visible_to_models"] is False
+          assert report["n_complete_pairs"] >= 72
+          assert report["arms"]["qa"]["accepted"] >= 72
+          assert report["arms"]["qa"]["completed"] >= 72
+          assert report["automatic_rollout_permitted"] is False
+          assert (root / "evaluation/index.html").is_file()
+          print("REAL SPECIALIZED QA:", report["qa_model"], report["qa_revision"])
+          print("REAL GENERATIVE COMPARATOR:", provenance["model"], provenance["revision"])
+          print("Matched questions:", report["n_complete_pairs"], "Failures:", report["failures"])
+          for name, arm in report["arms"].items():
+              print("ARM", name, "coverage:", arm["accepted_fraction"],
+                    "mean F1:", arm["mean_f1"], "exact match:", arm["exact_match"],
+                    "latency:", arm["mean_latency_s"])
+          print("Paired QA minus raw LLM F1:", report["direct_qa_minus_raw_llm_f1"])
+          print("Article-cluster interval:", report["article_cluster_interval"])
+          print("Public dev-set task-specific research, NOT general AI superiority.")
+          PY
+      - name: Upload specialized QA evidence without raw text or weights
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aru-specialized-qa-human-gold
+          path: |
+            specialized-qa-report/protocol.sha256
+            specialized-qa-report/generative-model.json
+            specialized-qa-report/health.json
+            specialized-qa-report/evaluation/index.html
+            specialized-qa-report/evaluation/report.json
           if-no-files-found: warn
           retention-days: 14

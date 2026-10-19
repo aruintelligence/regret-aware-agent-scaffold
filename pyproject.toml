@@ -68,6 +68,8 @@ py-modules = [
   "llm_squad_benchmark",
   "llm_paired_audit",
   "grounding_contract",
+  "evidence_quorum",
+  "quorum_registry_adapter",
   "extractive_qa_engine",
   "qa_proof_benchmark",
   "qa_local_server",

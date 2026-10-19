@@ -21,10 +21,12 @@ class FakeEngine:
     def __init__(self):
         self.calls = []
         self.text = "Oregon"
+        self.context_mode = False
 
     def answer(self, context, question, *, max_answer_tokens=30):
         self.calls.append((context, question, max_answer_tokens))
-        proof = ground_answer(self.text, context, model_revision=self.revision)
+        value = ("Washington" if "Washington" in context else "Oregon") if self.context_mode else self.text
+        proof = ground_answer(value, context, model_revision=self.revision)
         return {
             "accepted": proof["accepted"], "answer": proof["answer"],
             "proof": proof if proof["accepted"] else None,
@@ -46,7 +48,7 @@ class QALocalServerTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=5)
 
-    def post(self, payload, *, auth=True, consent=True, owner=None):
+    def post(self, payload, *, auth=True, consent=True, owner=None, path="/v1/qa/proof"):
         headers = {"Content-Type": "application/json"}
         if owner is not None:
             headers["X-ARU-Owner"] = owner
@@ -55,7 +57,7 @@ class QALocalServerTests(unittest.TestCase):
         if consent:
             headers["X-ARU-Consent"] = "research-opt-in"
         request = urllib.request.Request(
-            self.url + "/v1/qa/proof",
+            self.url + path,
             data=json.dumps(payload).encode("utf-8"),
             headers=headers, method="POST",
         )
@@ -185,6 +187,89 @@ class QALocalServerTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
                 thread.join(timeout=5)
+
+    def test_consent_scoped_quorum_agreement_conflict_and_revocation(self):
+        owner = "research-quorum-owner"
+        key = b"separate-consent-quorum-registry-secret-32"
+        sources = [
+            {"source_id": "source-a", "context": "The telescope is in Oregon."},
+            {"source_id": "source-b", "context": "A second document says Oregon."},
+            {"source_id": "source-c", "context": "The telescope is in Washington."},
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            db = str(Path(folder) / "consent.db")
+            grants = [
+                grant_source(
+                    db, source["context"], owner=owner, purpose="qa_source",
+                    ttl_seconds=300, key=key, consent_asserted=True,
+                )
+                for source in sources
+            ]
+            server = make_server(
+                self.engine, self.key, port=0,
+                registry_db=db, registry_key=key,
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            original_url = self.url
+            self.url = f"http://127.0.0.1:{server.server_port}"
+            path = "/v1/qa/quorum"
+            payload = {
+                "model": self.engine.model_id,
+                "question": "Where was the telescope?",
+                "sources": sources[:2],
+                "min_distinct_sources": 2,
+            }
+            try:
+                self.assertEqual(self.post(payload, path=path, auth=False, owner=owner)[0], 401)
+                self.assertEqual(self.post(payload, path=path, consent=False, owner=owner)[0], 403)
+                self.assertEqual(self.post(payload, path=path, owner="other-owner")[0], 403)
+                self.assertEqual(self.post(payload, path=path)[0], 422)
+                self.assertEqual(len(self.engine.calls), 0)
+                status, receipt = self.post(payload, path=path, owner=owner)
+                self.assertEqual(status, 200)
+                self.assertTrue(receipt["accepted"])
+                self.assertEqual(receipt["answer"], "Oregon")
+                self.assertEqual(receipt["source_approval"], "purpose_scoped_registry")
+                self.assertEqual(receipt["winning_distinct_source_fingerprints"], 2)
+                self.assertFalse(receipt["automatic_rollout_permitted"])
+                self.assertNotIn(sources[0]["context"], json.dumps(receipt))
+
+                self.engine.context_mode = True
+                status, conflict = self.post(
+                    {**payload, "sources": sources}, path=path, owner=owner,
+                )
+                self.assertEqual(status, 200)
+                self.assertFalse(conflict["accepted"])
+                self.assertEqual(conflict["reason"], "conflicting_verified_source_answers")
+                self.assertEqual(conflict["answer"], "")
+
+                before = len(self.engine.calls)
+                revoke_source(db, grants[1]["grant_id"], owner=owner, key=key)
+                status, _ = self.post(payload, path=path, owner=owner)
+                self.assertEqual(status, 403)
+                self.assertEqual(len(self.engine.calls), before)
+                self.assertEqual(self.post(
+                    {**payload, "sources": [sources[0], sources[0]]},
+                    path=path, owner=owner,
+                )[0], 422)
+            finally:
+                self.url = original_url
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+
+    def test_quorum_refuses_to_run_without_source_registry(self):
+        payload = {
+            "model": self.engine.model_id,
+            "question": "Where?",
+            "sources": [
+                {"source_id": "a", "context": "Oregon"},
+                {"source_id": "b", "context": "In Oregon"},
+            ],
+        }
+        self.assertEqual(self.post(payload, path="/v1/qa/quorum")[0], 403)
+        self.assertEqual(len(self.engine.calls), 0)
 
     def test_loopback_only(self):
         with self.assertRaises(ValueError):
