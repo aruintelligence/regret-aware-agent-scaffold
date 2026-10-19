@@ -17,7 +17,11 @@ class SourceRegistryCLITests(unittest.TestCase):
             source.write_text("The telescope is in Oregon.", encoding="utf-8")
             owner.write_text("opaque-owner-1\n", encoding="utf-8")
             script = str(Path(__file__).resolve().parents[1] / "source_registry_cli.py")
-            env = {**os.environ, "ARU_SOURCE_REGISTRY_KEY": "independent-test-source-registry-secret-32"}
+            env = {
+                **os.environ,
+                "ARU_SOURCE_REGISTRY_KEY": "independent-test-source-registry-secret-32",
+                "ARU_SOURCE_ANCHOR_KEY": "another-independent-anchor-secret-32-bytes",
+            }
             def call(*args):
                 return subprocess.run(
                     [sys.executable, script, *args],
@@ -38,6 +42,14 @@ class SourceRegistryCLITests(unittest.TestCase):
                            "--owner-file", str(owner))
             self.assertEqual(revoked.returncode, 0, revoked.stderr)
             self.assertEqual(call("check", *basic).returncode, 1)
+            checkpoint = root / "revocation-checkpoint.json"
+            anchored = call(
+                "anchor", "--db", str(db), "--checkpoint", str(checkpoint),
+            )
+            self.assertEqual(anchored.returncode, 0, anchored.stderr)
+            self.assertEqual(call(
+                "verify-anchor", "--db", str(db), "--checkpoint", str(checkpoint),
+            ).returncode, 0)
             self.assertNotIn("The telescope", db.read_bytes().decode("utf-8", errors="ignore"))
 
 
