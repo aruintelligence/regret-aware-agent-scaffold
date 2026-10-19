@@ -13,6 +13,7 @@ from collections import Counter
 from typing import Dict, List, Optional
 
 from off_policy_evaluation import Decision, estimate
+from crossfit_diagnostics import crossfit_dr, segment_diagnostics
 from route_experiments import (
     append_jsonl, choose_policy_action, load_decisions, read_jsonl,
 )
@@ -172,6 +173,8 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
                   if candidate["snips"] is not None and baseline["snips"] is not None
                   else None)
     paired["snips_difference"] = difference
+    dr = crossfit_dr(rows, baseline_policy, candidate_policy, seed=seed, max_weight=max_weight)
+    segments = segment_diagnostics(rows, baseline_policy, candidate_policy, max_weight=max_weight)
 
     # Advisory review gate only; never silently change production policy.
     reasons = []
@@ -189,6 +192,9 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
         reasons.append("Insufficient target-policy overlap")
     if paired["lower_95"] is None or paired["lower_95"] <= min_uplift:
         reasons.append(f"Exploratory lower confidence bound does not exceed {min_uplift:g} uplift")
+    harmed = [segment["task_signature"] for segment in segments if segment["material_negative_segment"]]
+    if harmed:
+        reasons.append(f"Material negative segment(s) observed: {len(harmed)}; investigate before review")
     if candidate_policy == baseline_policy:
         reasons.append("Candidate and baseline policies are identical")
     if not reasons:
@@ -209,6 +215,8 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
         "baseline": baseline,
         "candidate": candidate,
         "paired_difference": paired,
+        "crossfit_doubly_robust": dr,
+        "segment_diagnostics": segments,
         "review_gate": {
             "candidate_for_human_review": candidate_for_review,
             "automatic_rollout_permitted": False,
@@ -222,6 +230,8 @@ def evaluate_experiment(decisions_path: str, labels_path: str, *,
             "External labels are self-attested by the data provider, not independently authenticated.",
             "SNIPS is generally biased at finite samples; clipped IPS is also biased.",
             "The percentile bootstrap assumes independent tasks and may be invalid for adaptive or clustered logs.",
+            "Cross-fitted DR uses a coarse shrinkage reward model; it is a diagnostic, not a validated outcome predictor.",
+            "Segment-level harm checks are exploratory, may be noisy, and are not demographic fairness assessments.",
             "Evaluation uses only observed contexts and cannot establish performance under distribution shift.",
             "A passed screen is not proof of a causal gain and never authorizes automatic deployment.",
         ],
