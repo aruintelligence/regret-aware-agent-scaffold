@@ -38,6 +38,7 @@ aru-llm-paired = "llm_paired_audit:main"
 aru-ground = "grounding_contract:main"
 aru-qa-proof = "qa_proof_benchmark:main"
 aru-qa-serve = "qa_local_server:main"
+aru-source-registry = "source_registry_cli:main"
 aru-power = "pilot_power:main"
 aru-anytime = "anytime_evidence:main"
 
@@ -70,6 +71,8 @@ py-modules = [
   "extractive_qa_engine",
   "qa_proof_benchmark",
   "qa_local_server",
+  "sovereign_source_registry",
+  "source_registry_cli",
   "evidence_gateway_store",
   "evidence_gateway",
 ]
