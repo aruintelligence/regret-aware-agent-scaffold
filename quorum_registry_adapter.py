@@ -11,11 +11,13 @@ import hashlib
 from evidence_quorum import evidence_quorum, verify_quorum
 from grounding_contract import verify_grounding
 from sovereign_source_registry import authorize_source
+from source_registry_anchor import verify_source_checkpoint
 
 
 def evaluate_registered_quorum(engine, *, registry_db, registry_key,
                                owner, question, sources,
-                               min_distinct_sources=2, max_answer_tokens=30):
+                               min_distinct_sources=2, max_answer_tokens=30,
+                               registry_checkpoint=None, registry_anchor_key=None):
     """Fail closed unless all documents have active purpose-scoped grants.
 
     The returned receipt contains no raw passages and never authorizes
@@ -23,6 +25,11 @@ def evaluate_registered_quorum(engine, *, registry_db, registry_key,
     """
     if registry_db is None or registry_key is None:
         raise PermissionError("consent-scoped source registry required")
+    if registry_checkpoint is not None and (
+        not isinstance(registry_anchor_key, bytes)
+        or len(registry_anchor_key) < 32
+    ):
+        raise PermissionError("separate registry anchor key required")
     if not isinstance(owner, str) or not 0 < len(owner) <= 128:
         raise ValueError("valid owner identifier required")
     if not isinstance(question, str) or not 0 < len(question) <= 2000:
@@ -50,6 +57,16 @@ def evaluate_registered_quorum(engine, *, registry_db, registry_key,
             raise ValueError("source text must be nonempty and at most 5000 characters")
 
     def authorize_all():
+        if registry_checkpoint is not None:
+            try:
+                anchored = verify_source_checkpoint(
+                    registry_db, registry_checkpoint,
+                    registry_key=registry_key, anchor_key=registry_anchor_key,
+                )
+            except (OSError, ValueError) as error:
+                raise PermissionError("source checkpoint unavailable") from error
+            if not anchored["verified"]:
+                raise PermissionError("source checkpoint failed verification")
         for source in sources:
             result = authorize_source(
                 registry_db, source["context"], owner=owner,
