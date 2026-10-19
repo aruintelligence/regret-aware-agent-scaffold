@@ -73,7 +73,8 @@ def _initialize(path):
         if identity in _INITIALIZED and path.exists():
             return
         path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(str(path), timeout=30) as db:
+        db = sqlite3.connect(str(path), timeout=30)
+        try:
             db.execute("PRAGMA busy_timeout=30000")
             db.execute("PRAGMA journal_mode=WAL")
             db.execute("""CREATE TABLE IF NOT EXISTS consent_events (
@@ -83,6 +84,9 @@ def _initialize(path):
                 previous_mac TEXT NOT NULL,
                 event_mac TEXT NOT NULL
             )""")
+            db.commit()
+        finally:
+            db.close()
         if os.name == "posix":
             os.chmod(path, 0o600)
         _INITIALIZED.add(identity)
