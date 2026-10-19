@@ -37,6 +37,7 @@ aru-local-model = "hf_local_server:main"
 aru-llm-paired = "llm_paired_audit:main"
 aru-ground = "grounding_contract:main"
 aru-qa-proof = "qa_proof_benchmark:main"
+aru-qa-serve = "qa_local_server:main"
 aru-power = "pilot_power:main"
 aru-anytime = "anytime_evidence:main"
 
@@ -68,6 +69,7 @@ py-modules = [
   "grounding_contract",
   "extractive_qa_engine",
   "qa_proof_benchmark",
+  "qa_local_server",
   "evidence_gateway_store",
   "evidence_gateway",
 ]
