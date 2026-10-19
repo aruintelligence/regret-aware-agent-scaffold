@@ -12,6 +12,7 @@ import json
 import math
 import os
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -78,26 +79,50 @@ def _event_hash(prev, kind, event_id, created_at, canonical, key):
     return hmac.new(key, raw, hashlib.sha256).hexdigest() if key else hashlib.sha256(raw).hexdigest()
 
 
+_INIT_LOCK = threading.Lock()
+_INITIALIZED_DATABASES = set()
+
+
+def _initialize_database(path):
+    """Serialize first-time schema/WAL initialization within this process.
+
+    Changing journal_mode during concurrent writes can raise SQLITE_BUSY.
+    Once initialized, ordinary connections only set busy_timeout.
+    """
+    identity = str(path.resolve())
+    with _INIT_LOCK:
+        if identity in _INITIALIZED_DATABASES and path.is_file():
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(path), timeout=30)
+        try:
+            conn.execute("PRAGMA busy_timeout=30000")
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("""CREATE TABLE IF NOT EXISTS events (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL CHECK (kind IN ('decision','label')),
+                event_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                prev_hash TEXT NOT NULL,
+                event_hash TEXT NOT NULL,
+                UNIQUE(kind, event_id)
+            )""")
+            conn.commit()
+            if os.name == "posix":
+                os.chmod(path, 0o600)
+        finally:
+            conn.close()
+        _INITIALIZED_DATABASES.add(identity)
+
+
 @contextmanager
 def _connect(db_path):
     path = Path(db_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(str(path), timeout=10)
+    _initialize_database(path)
+    connection = sqlite3.connect(str(path), timeout=30)
     try:
-        connection.execute("PRAGMA busy_timeout=10000")
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("""CREATE TABLE IF NOT EXISTS events (
-            seq INTEGER PRIMARY KEY AUTOINCREMENT,
-            kind TEXT NOT NULL CHECK (kind IN ('decision','label')),
-            event_id TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            payload TEXT NOT NULL,
-            prev_hash TEXT NOT NULL,
-            event_hash TEXT NOT NULL,
-            UNIQUE(kind, event_id)
-        )""")
-        if os.name == "posix":
-            os.chmod(path, 0o600)
+        connection.execute("PRAGMA busy_timeout=30000")
         with connection:
             yield connection
     finally:
