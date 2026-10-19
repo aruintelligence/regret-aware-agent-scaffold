@@ -103,7 +103,10 @@ def run_paired_audit(dataset_path, out_dir, *, model,
             "grounded_rejection_reasons": defaultdict(int)},
         1: {"requests": 0, "completed": 0, "f1_sum": 0.0,
             "exact_match_sum": 0.0, "latency_sum": 0.0,
-            "prompt_tokens": 0, "completion_tokens": 0},
+            "prompt_tokens": 0, "completion_tokens": 0,
+            "grounded_accepted": 0, "grounded_rejected": 0,
+            "grounded_f1_sum": 0.0, "grounded_em_sum": 0.0,
+            "grounded_rejection_reasons": defaultdict(int)},
     }
     failed = 0
     for _qid, title, context, question, answers in questions:
