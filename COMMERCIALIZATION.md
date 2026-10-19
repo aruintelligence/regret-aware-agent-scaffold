@@ -14,6 +14,16 @@ A vendor-neutral evidence layer that helps teams **measure and audit AI agent ro
 
 The product is not "an AI that remembers everything." The concrete customer value is knowing **which agent workflow decisions worked, how certain the comparison is, what could go wrong in particular task domains, and whether the evidence is sufficient for a human rollout decision**.
 
+## Additional enterprise differentiators (research-only)
+
+The latest engineering iteration adds three commercially relevant but **not yet enterprise-validated** capabilities:
+
+1. **Independently anchored audit history.** A separately keyed checkpoint can detect a deleted or rewritten SQLite audit-log prefix, addressing a specific weakness of an ordinary HMAC chain. The checkpoint must be retained in separately controlled storage; neither a local HMAC nor a timestamp alone proves real-world label truth.
+2. **Pilot evidence design before spending.** A paired-outcome sample-size and grading/compute budget planner makes assumptions explicit, including expected uplift, discordance, clustering, missingness and per-task costs. Its normal approximation is not a substitute for design-specific statistical review.
+3. **Prospective anytime monitoring.** A fixed-mixture e-process has a self-contained nonnegative-supermartingale derivation for optional stopping under a stated conditional null. This is an established statistical method, not a new discovery. It cannot retroactively validate the SQuAD development benchmark or selective off-policy outcomes.
+
+A customer-facing proposition should emphasize **independently reproducible evidence, defensible experimental design, and human-controlled rollout**, not unverified claims of general AI intelligence or immunity to tampering.
+
 ## Target buyer and wedge
 
 Initial buyer hypothesis: head of AI platform, engineering director for agentic workflows, or an enterprise AI assurance lead at an organization deploying multiple AI agents.
