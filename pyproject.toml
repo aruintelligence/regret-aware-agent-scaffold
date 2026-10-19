@@ -33,6 +33,7 @@ aru-risk = "selective_risk_cli:main"
 aru-watch = "anytime_risk_watch_cli:main"
 aru-watch-real-audit = "real_model_watch_audit:main"
 aru-watch-change-point-audit = "change_point_audit:main"
+aru-watch-calibrated-audit = "calibrated_change_audit:main"
 aru-evidence = "experiment_cli:main"
 aru-gateway = "evidence_gateway:main"
 aru-squad = "squad_benchmark:main"
@@ -83,6 +84,8 @@ py-modules = [
   "real_model_watch_audit",
   "change_point_watch",
   "change_point_audit",
+  "calibrated_change_watch",
+  "calibrated_change_audit",
   "evidence_quorum",
   "quorum_registry_adapter",
   "extractive_qa_engine",

@@ -166,3 +166,98 @@ jobs:
             change-point-report/audit/change_point_report.json
           if-no-files-found: warn
           retention-days: 14
+  real_calibrated_change_audit:
+    name: Separate calibration and real-model retrieval intervention
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 7
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned pretrained CPU runtime
+        run: |
+          python -m pip install --disable-pip-version-check torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check transformers==4.48.3 safetensors==0.5.3
+      - name: Fetch pinned human-gold dataset and frozen protocol digest
+        run: |
+          mkdir -p benchmark-data calibrated-report
+          curl --fail --location --show-error --silent --retry 3 --max-time 120 https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json --output benchmark-data/dev-v1.1.json
+          echo "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9  benchmark-data/dev-v1.1.json" | sha256sum --check
+          sha256sum CALIBRATED_CHANGE_PROTOCOL.md > calibrated-report/protocol.sha256
+      - name: Run separate real calibration, baseline and intervention
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+          TOKENIZERS_PARALLELISM: 'false'
+        run: |
+          python calibrated_change_audit.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir calibrated-report/audit \
+            --qa-model distilbert/distilbert-base-cased-distilled-squad \
+            --qa-revision 564e9b582944a57a3e586bbb98fd6f0a4118db7f \
+            --acknowledge-model-calls
+      - name: Recompute both calibrated watch reports from exact archived labels
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from calibrated_change_watch import calibrated_restart_risk_stream
+          root = Path('calibrated-report/audit')
+          report = json.loads((root / 'calibrated_report.json').read_text())
+          def read(path):
+              return [json.loads(line) for line in (root / path).read_text().splitlines()]
+          cal = read('calibration/outcomes.jsonl')
+          baseline = read('evaluation/baseline/outcomes.jsonl')
+          changed = read('evaluation/intervention_outcomes.jsonl')
+          assert report['kind'] == 'aru_independently_calibrated_restart_real_model_research_audit'
+          assert report['dataset_sha256'] == '95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9'
+          assert report['model_revision'] == '564e9b582944a57a3e586bbb98fd6f0a4118db7f'
+          assert report['calibration_offset'] == 440 and report['evaluation_offset'] == 560
+          assert report['calibration_model_calls'] == len(cal) == 120
+          assert report['baseline_model_calls'] == len(baseline) == 120
+          assert report['intervention_additional_model_calls'] == 65 and len(changed) == 120
+          assert changed[:55] == baseline[:55]
+          assert all(a['event_id'] == b['event_id'] and a['group'] == b['group'] for a,b in zip(baseline,changed))
+          assert report['calibration_errors'] == sum(x['error'] for x in cal)
+          assert report['baseline_errors'] == sum(x['error'] for x in baseline)
+          assert report['intervention_errors'] == sum(x['error'] for x in changed)
+          assert report['intervention_onset_after_observations'] == 55
+          assert report['intervention_context_cap_characters'] == 128
+          assert report['intervention_is_natural_live_drift'] is False
+          assert report['automatic_rollout_permitted'] is False
+          for stream, key in ((baseline,'baseline_calibrated_watch'), (changed,'intervention_calibrated_watch')):
+              expected = calibrated_restart_risk_stream(
+                  cal, stream, groups=('short_source','long_source'),
+                  model_revision=report['model_revision'], rubric_id=report['rubric_id'],
+                  alpha_total=0.05, calibration_delta=0.025,
+                  min_slice_calibration=20, horizon=120,
+                  starts=(1,21,41,61,81,101),
+              )
+              assert expected == report[key]
+          assert len(report['synthetic_label_flip_scenarios']) == 6
+          print('Calibration errors:', report['calibration_errors'])
+          print('Calibrated upper targets:', report['baseline_calibrated_watch']['calibration_targets'])
+          print('Real baseline errors and first alarm:', report['baseline_errors'], report['baseline_calibrated_watch']['first_alarm_global_observation'])
+          print('Real intervention errors and first alarm:', report['intervention_errors'], report['intervention_calibrated_watch']['first_alarm_global_observation'])
+          print('Old 50% watch on same questions:', report['same_questions_previous_50_percent_watch'])
+          print('Synthetic stress:', report['synthetic_label_flip_scenarios'])
+          print('Research only; deliberate retrieval failure; no customer safety claim.')
+          PY
+      - name: Preserve protocol, aggregate findings and three binary traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aru-calibrated-disjoint-real-model-audit
+          path: |
+            calibrated-report/protocol.sha256
+            calibrated-report/audit/calibration/outcomes.jsonl
+            calibrated-report/audit/calibration/report.json
+            calibrated-report/audit/evaluation/baseline/outcomes.jsonl
+            calibrated-report/audit/evaluation/baseline/report.json
+            calibrated-report/audit/evaluation/intervention_outcomes.jsonl
+            calibrated-report/audit/evaluation/change_point_report.json
+            calibrated-report/audit/calibrated_report.json
+          if-no-files-found: warn
+          retention-days: 14

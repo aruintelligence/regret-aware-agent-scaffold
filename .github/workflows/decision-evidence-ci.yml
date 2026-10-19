@@ -50,6 +50,7 @@ jobs:
           aru-watch --help > /dev/null
           aru-watch-real-audit --help > /dev/null
           aru-watch-change-point-audit --help > /dev/null
+          aru-watch-calibrated-audit --help > /dev/null
           aru-source-registry --help > /dev/null
       - name: Verify prospective pilot sample-size planner
         run: |
