@@ -1,0 +1,122 @@
+# ĀRU Decision Evidence Lab — Commercialization Blueprint
+
+**Status:** experimental software research; not a production service, independently validated AI, or security-certified product.
+
+## The product in one sentence
+
+A vendor-neutral evidence layer that helps teams **measure and audit AI agent routing decisions before changing a production policy**.
+
+The product is not "an AI that remembers everything." The concrete customer value is knowing **which agent workflow decisions worked, how certain the comparison is, what could go wrong in particular task domains, and whether the evidence is sufficient for a human rollout decision**.
+
+## Target buyer and wedge
+
+Initial buyer hypothesis: head of AI platform, engineering director for agentic workflows, or an enterprise AI assurance lead at an organization deploying multiple AI agents.
+
+Initial use cases:
+- Compare a new agent routing policy with an incumbent using logged decisions and independent task outcomes.
+- Detect domains where an apparent global improvement masks a decline.
+- Produce a portable evidence package for a technical review committee.
+- Track how much of an improvement claim is supported by observed overlap and effective sample size.
+
+Avoid first deploying into autonomous medical, financial eligibility, policing, or other consequential decision systems. Those need additional domain-specific safeguards, qualified review, and legal/regulatory assessment.
+
+## Current prototype — what exists
+
+| Capability | Current status |
+| --- | --- |
+| Scripted route simulator with memory | Existing scaffold |
+| Opt-in single-route randomized logging | Implemented |
+| Vendor-neutral categorical decision adapter | Implemented; caller's probabilities are not independently verified |
+| Separate outcome labels with grader/rubric provenance | Implemented; self-attested |
+| IPS / SNIPS / overlap / effective sample size | Implemented |
+| Paired bootstrap uncertainty | Implemented; assumes independent tasks |
+| Cross-fitted doubly robust diagnostics | Implemented; simple, unvalidated reward model |
+| Task-signature negative-segment screen | Implemented; exploratory |
+| Portable, accessible offline HTML report | Implemented |
+| Optional SHA-256 / HMAC evidence attestation | Implemented; not immutable storage |
+| Analytic-ground-truth Monte Carlo falsification | Implemented on synthetic data |
+| Python 3.9 / 3.12 continuous tests | Implemented |
+| Real task executor and independent customer grader | **Not implemented** |
+| Production API, multi-tenancy, SSO/RBAC, encryption, audit trail | **Not implemented** |
+| Prospective external performance study | **Not performed** |
+| Security certification, compliance, enterprise SLA | **Not established** |
+
+## Customer demo story (do not overclaim)
+
+1. A team has a baseline agent policy and a proposed routing policy.
+2. Its own controller randomly explores allowed routes and logs exact selection probabilities.
+3. Independent graders assign outcomes using a predeclared rubric.
+4. The evidence engine estimates policy values, shows uncertainty and coverage, and flags weak support or domain-level declines.
+5. The system produces a portable report and an optional authenticated checksum manifest.
+6. A human reviewer decides whether to run a prospective experiment. **No automatic rollout occurs.**
+
+Use synthetic examples for the initial product demonstration, labeled prominently. Do not describe those examples as real-world gains.
+
+## Differentiation to validate, not assert
+
+- **Evidence-first architecture:** external labels remain separate from internally generated agent quality scores.
+- **Decision provenance:** explicit logging propensities and candidate sets instead of untraceable "AI improved itself" narratives.
+- **Safety visibility:** a global win can still be blocked by a negative domain-level signal.
+- **Portable audit:** dependency-free local reports and optional HMAC authentication.
+- **Vendor-neutral instrumentation:** the same event schema can wrap external orchestrators.
+
+These are product hypotheses, not proof of superiority to existing commercial AI observability or evaluation tools. Conduct a competitor comparison before sales claims.
+
+## Pilot offer — pricing hypotheses, not verified market rates
+
+**Decision Assurance Design Partner Pilot**
+- 6–8 weeks; proposed fixed pilot fee: **$15,000–$35,000**, to be tested in discovery.
+- Scope: one workflow, one baseline and one challenger, instrumentation review, independent grading rubric, policy evidence report, risk register, and rollout recommendation.
+- Customer supplies task data, safe experimentation approval, and a qualified evaluator.
+- Acceptance criteria: valid propensity logs, complete grading, reproducible report, clear cost-per-success and failure metrics, and a documented go/no-go decision.
+
+**Possible annual platform offering (future):** a hosted subscription with SSO, tenant isolation, signed evidence bundles, audit exports, API integrations, alerts, and SLA. Pricing must be derived from paid pilots, support burden, security costs, and demonstrated ROI; no annual price is established.
+
+## Evidence and revenue milestones
+
+### Days 1–30 — engineering validation
+- Complete schema review and threat model.
+- Integrate one external agent with real randomized logging.
+- Pre-register two candidate policies and a blinded grading rubric.
+- Measure latency overhead, dropped events, logging consistency, and missing labels.
+- Set up reproducible tests and independent code review.
+
+### Days 31–60 — prospective pilot
+- Recruit one design partner with non-consequential tasks.
+- Collect sufficient independently graded decisions to support the preregistered precision target; do not promise a fixed sample size without a power analysis.
+- Compare policy value, task completion, failure rate, cost per successful task, and domain-level regressions.
+- Reassess bootstrap assumptions; use cluster-aware or sequential methods when appropriate.
+- Audit data provenance and potential evaluator bias.
+
+### Days 61–90 — commercial decision
+- Deliver a signed pilot evidence pack and customer-facing dashboard.
+- Obtain explicit customer feedback and evidence of willingness to pay.
+- Decide whether to invest in hardened ingestion, authenticated tenancy, RBAC/SSO, retention controls, and operational monitoring.
+- Do not claim an enterprise-ready product until security, privacy, reliability, and support criteria are met.
+
+## Decision gates
+
+A credible launch requires:
+1. **Measurement validity:** logged probabilities reflect the actual randomized controller.
+2. **Outcome validity:** an independent rubric and graders are documented; missingness and leakage are audited.
+3. **Statistical validity:** a preregistered comparison, appropriate dependence-aware inference, and sufficient overlap.
+4. **Operational validity:** stable ingestion, bounded overhead, rollback, incident response, and support.
+5. **Security/privacy validity:** tenant isolation, authentication, encryption, data minimization, deletion and consent mechanisms.
+6. **Commercial validity:** customer willingness to pay for a demonstrable decision or risk reduction.
+
+Fail any gate: keep the system in research or pilot mode.
+
+## Intellectual property and ownership
+
+The repository currently uses the **MIT License**, which permits reuse and commercial sale by others. A future commercial moat would need to come from deployment quality, hosted infrastructure, trusted integrations, brand, customer relationships, proprietary service features, or properly protected IP—not exclusive control over publicly MIT-licensed code. The repository README attributes the original work to two creators. Confirm contributor rights and ownership before assigning IP, negotiating licenses, or claiming exclusivity. Trademark availability, patentability, and protection status have **not** been established.
+
+## Enterprise engineering roadmap
+
+A credible production architecture could separate:
+- **Ingestion service:** authenticated, idempotent event acceptance; exact propensity and candidate-set validation.
+- **Evidence store:** encrypted tenant-isolated decisions and grader outcomes; transactional writes; retention policy.
+- **Evaluation worker:** deterministic versioned estimators, cross-fitting, sensitivity analysis, power and overlap checks.
+- **Review service:** human approval, policy versioning, audit logs, rollback and change control.
+- **Dashboard:** reproducible reports with provenance, segment warnings, accessible design and signed exports.
+
+The existing Python modules are a research reference implementation of part of this architecture. They should not be presented as a production deployment.
