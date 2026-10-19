@@ -136,6 +136,32 @@ class SovereignRiskTests(unittest.TestCase):
         self.assertEqual(result["reason"], "registry_checkpoint_verification_failed")
         self.assertEqual(self.qa.calls, 0)
 
+    def test_revocation_during_inference_blocks_final_answer(self):
+        grant = self.grant()
+        base_engine = self.qa
+
+        class RevokingQA:
+            revision = base_engine.revision
+            model_id = base_engine.model_id
+
+            def answer(self, context, question):
+                response = base_engine.answer(context, question)
+                revoke_source(
+                    self_db, grant["grant_id"],
+                    owner="authorized-operator", key=REGISTRY_KEY,
+                )
+                return response
+
+        self_db = self.db
+        result = answer_with_sovereign_risk(
+            RevokingQA(), self.source, "Where was the telescope?",
+            **self.kwargs,
+        )
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["answer"], "")
+        self.assertEqual(result["reason"], "source_revoked_during_inference")
+        self.assertEqual(self.qa.calls, 1)
+
     def test_missing_checkpoint_key_denies_before_inference(self):
         self.grant()
         result = self.ask(registry_checkpoint="unavailable.json")
