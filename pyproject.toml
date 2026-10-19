@@ -73,6 +73,7 @@ py-modules = [
   "qa_local_server",
   "sovereign_source_registry",
   "source_registry_cli",
+  "source_registry_anchor",
   "evidence_gateway_store",
   "evidence_gateway",
 ]
