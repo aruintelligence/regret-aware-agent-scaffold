@@ -414,3 +414,21 @@ The GitHub Actions job **Real open-weight LLM · public human-gold QA** performs
 
 
 The model experiment's **predeclared configuration, failure rules and non-claims** are frozen in [REAL_MODEL_PROTOCOL.md](REAL_MODEL_PROTOCOL.md). The CI artifact contains a SHA-256 checksum of that protocol, model commit provenance, observed outcomes and a standalone report. This distinguishes genuine model execution from a mock-server integration test and prevents post-hoc success criteria from being quietly substituted.
+
+
+### First actual model run — verified, limited result
+
+The initial genuine open-weight model experiment completed in [GitHub Actions run 39198692344](https://github.com/aruintelligence/regret-aware-agent-scaffold/actions/runs/39198692344), using model revision `12fd25f77366fa6b3b4b768ec3050bf629380bac`. **40/40 real model requests completed, with zero infrastructure failures.** On different randomly assigned public SQuAD questions, the direct prompt arm (29 tasks) averaged **0.1737 token F1** and the grounded-extractive arm (11 tasks) averaged **0.2274 token F1**. **Both arms had 0% exact-match accuracy.** These low scores are disclosed rather than hidden, and the small unbalanced groups do **not** establish a statistically meaningful prompt improvement.
+
+A second, disjoint **same-question paired audit** is now available to reduce task-mix noise. It evaluates both frozen prompts on the next 40 SHA-sorted questions (offset 40) and reports direct paired F1 differences, clustered exploratory uncertainty and failures:
+
+```bash
+aru-llm-paired --dataset dev-v1.1.json \
+  --out-dir paired-followup \
+  --model HuggingFaceTB/SmolLM2-135M-Instruct \
+  --endpoint http://127.0.0.1:1234/v1/chat/completions \
+  --limit 40 --offset 40 --seed 20261018 \
+  --acknowledge-model-calls
+```
+
+The follow-up protocol was extended **after** seeing the first randomized result, and the public development data is not a private hidden holdout. Do not describe this as a confirmatory or enterprise-quality model evaluation.
