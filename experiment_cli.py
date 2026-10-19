@@ -20,9 +20,25 @@ from pathlib import Path
 from evidence_dashboard import save_dashboard
 from evidence_audit import build_manifest, save_manifest, verify_manifest
 from evidence_lab import add_label, evaluate_experiment
-from route_experiments import (
-    ExperimentRuntime, action_id, append_jsonl, validate_decision,
+from experiment_protocol import (
+    POLICIES, load_protocol, make_protocol, protocol_digest, save_protocol,
 )
+from route_experiments import (
+    ExperimentRuntime, action_id, append_jsonl, load_decisions, validate_decision,
+)
+
+
+def lock_protocol(args) -> None:
+    protocol = make_protocol(
+        args.study_id, args.baseline_policy, args.candidate_policy,
+        args.rubric_id, replicates=args.replicates, seed=args.seed,
+        max_weight=args.max_weight, min_labeled=args.min_labeled,
+        min_ess=args.min_ess, min_uplift=args.min_uplift,
+    )
+    save_protocol(protocol, args.protocol)
+    print(json.dumps({"protocol": args.protocol,
+                      "sha256": protocol_digest(protocol),
+                      "warning": "Publish or witness this digest before collecting outcomes to establish timing."}, indent=2))
 
 
 def collect(args) -> None:
@@ -30,7 +46,8 @@ def collect(args) -> None:
                if line.strip()]
     if not prompts:
         raise ValueError("prompts file contains no tasks")
-    runtime = ExperimentRuntime(args.decisions, epsilon=args.epsilon, seed=args.seed)
+    runtime = ExperimentRuntime(args.decisions, epsilon=args.epsilon, seed=args.seed,
+                                protocol_path=args.protocol)
     for index, prompt in enumerate(prompts, 1):
         state = runtime.run(prompt, session_id=f"experiment_{index}")
         event = state.agent_outputs["planner_node"]["experiment"]
@@ -44,11 +61,39 @@ def collect(args) -> None:
     print(f"Logged {len(prompts)} route decisions. Obtain independent labels before evaluation.")
 
 
+def label(args) -> None:
+    if args.protocol:
+        protocol = load_protocol(args.protocol)
+        if args.rubric_id != protocol["rubric_id"]:
+            raise ValueError("label rubric differs from the decision-bound protocol")
+        digest = protocol_digest(protocol)
+        if any(row.get("protocol_sha256") != digest for row in load_decisions(args.decisions)):
+            raise ValueError("decisions do not match the supplied protocol")
+    print(json.dumps(add_label(args.decisions, args.labels, args.decision_id,
+                               args.reward, args.grader, args.rubric_id,
+                               args.source_kind), indent=2))
+
+
 def evaluate(args) -> dict:
+    protocol_path = getattr(args, "protocol", None)
+    protocol = load_protocol(protocol_path) if protocol_path else None
+    analysis = protocol["analysis"] if protocol else {}
+    def fixed(name, default):
+        supplied = getattr(args, name, None)
+        planned = (protocol.get(name) if name in ("baseline_policy", "candidate_policy")
+                   else analysis.get(name)) if protocol else default
+        if protocol and supplied is not None and supplied != planned:
+            raise ValueError(f"{name} differs from the decision-bound protocol")
+        return planned if supplied is None else supplied
+
     report = evaluate_experiment(
-        args.decisions, args.labels, candidate_policy=args.candidate_policy,
-        baseline_policy=args.baseline_policy, replicates=args.replicates,
-        seed=args.seed,
+        args.decisions, args.labels,
+        candidate_policy=fixed("candidate_policy", "shortest"),
+        baseline_policy=fixed("baseline_policy", "greedy"),
+        replicates=fixed("replicates", 1000), seed=fixed("seed", 7),
+        max_weight=fixed("max_weight", 20.0),
+        min_labeled=fixed("min_labeled", 200), min_ess=fixed("min_ess", 30.0),
+        min_uplift=fixed("min_uplift", 0.02), protocol_path=protocol_path,
     )
     if args.report_json:
         target = Path(args.report_json)
@@ -149,6 +194,7 @@ def attest(args) -> None:
     manifest = build_manifest(
         args.decisions, args.labels, report_path=args.report_json,
         secret=_hmac_secret(args.hmac_key_env),
+        protocol_path=args.protocol,
     )
     save_manifest(manifest, args.manifest)
     print(json.dumps({"manifest": args.manifest,
@@ -160,6 +206,7 @@ def verify(args) -> None:
     result = verify_manifest(
         args.manifest, args.decisions, args.labels,
         report_path=args.report_json, secret=_hmac_secret(args.hmac_key_env),
+        protocol_path=args.protocol,
     )
     print(json.dumps(result, indent=2))
     if not result["verified"]:
@@ -170,11 +217,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
+    protocol_parser = sub.add_parser("lock-protocol", help="Write a non-overwriting analysis plan before data collection")
+    protocol_parser.add_argument("--protocol", required=True)
+    protocol_parser.add_argument("--study-id", required=True)
+    protocol_parser.add_argument("--rubric-id", required=True)
+    protocol_parser.add_argument("--baseline-policy", choices=POLICIES, default="greedy")
+    protocol_parser.add_argument("--candidate-policy", choices=POLICIES, default="shortest")
+    protocol_parser.add_argument("--replicates", type=int, default=1000)
+    protocol_parser.add_argument("--seed", type=int, default=7)
+    protocol_parser.add_argument("--max-weight", type=float, default=20.0)
+    protocol_parser.add_argument("--min-labeled", type=int, default=200)
+    protocol_parser.add_argument("--min-ess", type=float, default=30.0)
+    protocol_parser.add_argument("--min-uplift", type=float, default=0.02)
+    protocol_parser.set_defaults(handler=lock_protocol)
+
     collect_parser = sub.add_parser("collect", help="Log randomized routes (no reward inferred)")
     collect_parser.add_argument("--prompts", required=True, help="UTF-8 text, one task per line")
     collect_parser.add_argument("--decisions", required=True, help="Append-only JSONL decision log")
     collect_parser.add_argument("--epsilon", type=float, default=0.25)
     collect_parser.add_argument("--seed", type=int, default=7)
+    collect_parser.add_argument("--protocol", help="Bind every logged decision to this analysis plan")
     collect_parser.set_defaults(handler=collect)
 
     label_parser = sub.add_parser("label", help="Append one independently graded outcome")
@@ -185,18 +247,17 @@ def build_parser() -> argparse.ArgumentParser:
     label_parser.add_argument("--grader", required=True)
     label_parser.add_argument("--rubric-id", required=True)
     label_parser.add_argument("--source-kind", choices=("external", "synthetic"), required=True)
-    label_parser.set_defaults(handler=lambda args: print(json.dumps(add_label(
-        args.decisions, args.labels, args.decision_id, args.reward,
-        args.grader, args.rubric_id, args.source_kind,
-    ), indent=2)))
+    label_parser.add_argument("--protocol", help="Check rubric and decision binding before writing")
+    label_parser.set_defaults(handler=label)
 
     eval_parser = sub.add_parser("evaluate", help="Compare policies and produce evidence report")
     eval_parser.add_argument("--decisions", required=True)
     eval_parser.add_argument("--labels", required=True)
-    eval_parser.add_argument("--baseline-policy", choices=("greedy", "shortest", "evidence_first"), default="greedy")
-    eval_parser.add_argument("--candidate-policy", choices=("greedy", "shortest", "evidence_first"), default="shortest")
-    eval_parser.add_argument("--replicates", type=int, default=1000)
-    eval_parser.add_argument("--seed", type=int, default=7)
+    eval_parser.add_argument("--protocol", help="Require every decision/label to match the locked analysis plan")
+    eval_parser.add_argument("--baseline-policy", choices=POLICIES)
+    eval_parser.add_argument("--candidate-policy", choices=POLICIES)
+    eval_parser.add_argument("--replicates", type=int)
+    eval_parser.add_argument("--seed", type=int)
     eval_parser.add_argument("--report-json")
     eval_parser.add_argument("--report-html")
     eval_parser.set_defaults(handler=evaluate)
@@ -210,6 +271,7 @@ def build_parser() -> argparse.ArgumentParser:
     attest_parser.add_argument("--decisions", required=True)
     attest_parser.add_argument("--labels", required=True)
     attest_parser.add_argument("--report-json")
+    attest_parser.add_argument("--protocol", help="Include the locked protocol in the evidence bundle")
     attest_parser.add_argument("--manifest", required=True)
     attest_parser.add_argument("--hmac-key-env", help="Environment variable holding an optional secret")
     attest_parser.set_defaults(handler=attest)
@@ -218,6 +280,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--decisions", required=True)
     verify_parser.add_argument("--labels", required=True)
     verify_parser.add_argument("--report-json")
+    verify_parser.add_argument("--protocol")
     verify_parser.add_argument("--manifest", required=True)
     verify_parser.add_argument("--hmac-key-env")
     verify_parser.set_defaults(handler=verify)

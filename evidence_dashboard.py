@@ -28,6 +28,8 @@ def render_dashboard(report: dict) -> str:
     paired = report["paired_difference"]
     anytime = report.get("anytime_ips_difference", {})
     gate = report["review_gate"]
+    protocol = report.get("protocol_binding", {"status": "unbound_exploratory", "sha256": None,
+                                               "warning": "No decision-bound analysis protocol"})
     dr = report.get("crossfit_doubly_robust", {})
     segments = report.get("segment_diagnostics", [])
     segment_rows = "".join(
@@ -157,6 +159,8 @@ ul{{padding-left:22px;color:var(--muted)}}li{{margin:7px 0}}footer{{color:var(--
 <tbody>{segment_rows}</tbody></table></div><p class="sub">A ⚠ flags an observed material negative segment with minimum support. It is an investigation trigger, not proof of subgroup harm.</p></section>
 <section class="panel"><h2 style="margin-top:0">Evidence provenance</h2>
 <p>Labels: {source or "None"} · distinct graders: {report["distinct_graders"]} · runtime: {escape(", ".join(report["runtime_kind"]))}</p>
+<p><strong>Analysis protocol:</strong> {escape(str(protocol["status"]))} · SHA-256: {escape(str(protocol.get("sha256") or "None"))}</p>
+<p class="sub">{escape(str(protocol["warning"]))}</p>
 <h2>Interpretation limits</h2><ul>{limitations}</ul></section>
 <footer>ĀRU Intelligence · Decision Evidence Lab · Generated {generated}. This is a research report, not a certification, sales performance guarantee, or deployment approval.</footer>
 </main></body></html>"""

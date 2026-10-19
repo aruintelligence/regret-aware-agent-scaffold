@@ -33,7 +33,8 @@ def _digest(path: str) -> dict:
 
 def build_manifest(decisions_path: str, labels_path: str,
                    report_path: Optional[str] = None,
-                   secret: Optional[bytes] = None) -> dict:
+                   secret: Optional[bytes] = None,
+                   protocol_path: Optional[str] = None) -> dict:
     decisions = load_decisions(decisions_path)
     labels = load_labels(labels_path)
     decision_ids = {row["decision_id"] for row in decisions}
@@ -45,6 +46,15 @@ def build_manifest(decisions_path: str, labels_path: str,
     }
     if report_path:
         files["report"] = _digest(report_path)
+    if protocol_path:
+        from experiment_protocol import load_protocol, protocol_digest
+        protocol = load_protocol(protocol_path)
+        digest = protocol_digest(protocol)
+        if any(row.get("protocol_sha256") != digest for row in decisions):
+            raise ValueError("decision log does not match the evidence protocol")
+        if any(label["rubric_id"] != protocol["rubric_id"] for label in labels.values()):
+            raise ValueError("outcome rubric does not match the evidence protocol")
+        files["protocol"] = _digest(protocol_path)
     manifest = {
         "schema_version": 1,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -71,7 +81,8 @@ def save_manifest(manifest: dict, path: str) -> None:
 
 def verify_manifest(manifest_path: str, decisions_path: str, labels_path: str,
                     report_path: Optional[str] = None,
-                    secret: Optional[bytes] = None) -> dict:
+                    secret: Optional[bytes] = None,
+                    protocol_path: Optional[str] = None) -> dict:
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
     if manifest.get("schema_version") != 1:
         raise ValueError("unsupported manifest schema")
@@ -96,6 +107,8 @@ def verify_manifest(manifest_path: str, decisions_path: str, labels_path: str,
     paths = {"decisions": decisions_path, "labels": labels_path}
     if report_path:
         paths["report"] = report_path
+    if protocol_path:
+        paths["protocol"] = protocol_path
     for role, expected in manifest.get("files", {}).items():
         if role not in paths:
             errors.append(f"Missing path for {role}")

@@ -12,8 +12,9 @@ import time
 import uuid
 from typing import List, Optional
 
+from experiment_protocol import load_protocol, protocol_digest
 from route_experiments import (
-    SCHEMA_VERSION, action_id, append_jsonl, validate_decision,
+    SCHEMA_VERSION, action_id, append_jsonl, ensure_log_protocol, validate_decision,
 )
 
 
@@ -25,6 +26,7 @@ def log_instrumented_decision(
     selected_route: List[str],
     selection_probabilities: List[float],
     predicted_scores: Optional[List[float]] = None,
+    protocol_path: Optional[str] = None,
 ) -> dict:
     """Append a verified-format event with the *actual* selection probability.
 
@@ -68,7 +70,10 @@ def log_instrumented_decision(
         "runtime_kind": "external_instrumented",
         "loop_count": 0,
     }
+    if protocol_path:
+        record["protocol_sha256"] = protocol_digest(load_protocol(protocol_path))
     validate_decision(record)
+    ensure_log_protocol(decisions_path, record.get("protocol_sha256"))
     append_jsonl(decisions_path, record)
     return {"decision_id": record["decision_id"], "action": action,
             "propensity": propensity, "task_signature": task_signature}
