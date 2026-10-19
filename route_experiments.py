@@ -123,6 +123,12 @@ def load_decisions(path: str) -> List[dict]:
 def choose_policy_action(row: dict, policy: str) -> str:
     """Deterministic policies defined entirely from pre-decision candidates."""
     candidates = row["candidates"]
+    if policy == "first_candidate":
+        return candidates[0]["action"]
+    if policy == "second_candidate":
+        if len(candidates) < 2:
+            raise ValueError("second_candidate requires at least two candidates")
+        return candidates[1]["action"]
     if policy == "greedy":
         # Choose highest predicted score, preserving first-in-list tie order.
         return max(candidates, key=lambda candidate: candidate["predicted_score"])["action"]
