@@ -37,6 +37,12 @@ The new **observed-domain total-variation stress test** reweights the same 48 me
 
 The computed **break-even topic-mix radius** is approximately **20.09%**: at that adversarial reweighting budget, the observed aggregate gain can be eliminated. This is a descriptive fragility threshold under a constrained reweighting model, **not** a confidence interval, causal proof, or guarantee about real future customers.
 
+### Exact paired-discordance cross-check
+
+Across the same 2,000 questions, **93** questions were correct only for the challenger, while **21** were correct only for the baseline. These **114 discordant pairs** account for the net **72** additional correct selections.
+
+The exact two-sided McNemar conditional calculation gives `p = 5.3124 × 10⁻¹²` **if the question pairs are independent**. They are not fully independent: questions share paragraphs and articles. Therefore this p-value is **descriptive, not confirmatory**, and it should not be used as the primary statistical claim. The article-cluster exploratory interval and negative-domain audit above are essential context. No multiple-testing or post-hoc model-selection correction is claimed.
+
 ### Off-policy estimator check
 
 Only the randomized selected route's outcome was supplied to the off-policy estimator; both routes were executed offline solely to establish the directly observable audit benchmark.
