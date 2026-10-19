@@ -39,6 +39,7 @@ py-modules = [
   "route_experiments",
   "evidence_lab",
   "crossfit_diagnostics",
+  "distribution_robustness",
   "evidence_dashboard",
   "evidence_audit",
   "experiment_cli",
