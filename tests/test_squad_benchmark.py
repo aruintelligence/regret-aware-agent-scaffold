@@ -81,6 +81,11 @@ class SquadSentenceTests(unittest.TestCase):
             self.assertEqual(report["n_labeled"], 24)
             self.assertEqual(report["label_source_counts"]["external"], 24)
             self.assertEqual(report["external_benchmark"]["n_evaluated"], 24)
+            inference = report["external_benchmark"]["exact_mcnemar_descriptive"]
+            self.assertEqual(inference["discordant_pairs"],
+                             report["external_benchmark"]["baseline_only"]
+                             + report["external_benchmark"]["candidate_only"])
+            self.assertTrue(0 <= inference["exact_two_sided_p"] <= 1)
             self.assertEqual(report["external_benchmark"]["paired_article_cluster_interval"]["clusters"], 1)
             self.assertEqual(report["external_benchmark"]["paired_paragraph_cluster_interval"]["clusters"], 1)
             self.assertFalse(report["review_gate"]["automatic_rollout_permitted"])
