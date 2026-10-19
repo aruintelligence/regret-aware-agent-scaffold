@@ -623,3 +623,5 @@ aru-watch-real-audit --dataset dev-v1.1.json --out-dir watch-audit \
 ```
 
 PR #7's real-model CI job records the model revision, protocol hash, ordered binary outcome stream and aggregate audit. The report is unsigned and uses a public development dataset. A signed, independently operated current ledger, separate static calibration and externally audited grading are still needed before evaluating a customer workflow. The dual-evidence gate now rejects signed monitoring whose error target or declared group scope differs from the signed calibration policy.
+
+**Observed audit:** [the first 120-question real-model results](REAL_MODEL_WATCH_RESULTS.md) recorded 12 rubric errors, zero execution failures and no baseline alarm. Only the earliest and most extreme of six **synthetic** post-onset deterioration scenarios triggered an alarm by request 120; the other five were missed. The complete public-benchmark binary event trace and aggregate report are retained for recomputation. This negative detection result motivates a separately preregistered change-point experiment; it does not justify altering the recorded threshold after viewing these outcomes.
