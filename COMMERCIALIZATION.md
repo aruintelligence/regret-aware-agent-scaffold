@@ -2,6 +2,12 @@
 
 **Status:** experimental software research; not a production service, independently validated AI, or security-certified product.
 
+## Verified research progress (October 2026)
+
+A reproducible, human-annotated **sentence-retrieval** experiment on 2,000 Stanford SQuAD v1.1 questions measured **78.5%** baseline versus **82.1%** challenger answer-containing-sentence selection (**+3.6 percentage points**). The article-cluster exploratory interval was **+2.47 to +4.61 percentage points**. One article regressed, so the human-review gate blocked advancement. Full methodology, dataset SHA-256 and CI provenance are in [BENCHMARK_EVIDENCE.md](BENCHMARK_EVIDENCE.md).
+
+The system now also includes an opt-in local/OpenAI-compatible LLM benchmark adapter (tested against a mock server, **not a real model**), and a loopback-only consent-gated SQLite/HMAC ingestion gateway with an export-to-dashboard evidence passport. These are tangible integration steps, **not evidence of enterprise production readiness**.
+
 ## The product in one sentence
 
 A vendor-neutral evidence layer that helps teams **measure and audit AI agent routing decisions before changing a production policy**.
