@@ -1,0 +1,508 @@
+name: Decision Evidence Lab CI
+
+on:
+  push:
+    branches:
+      - main
+      - innovation/**
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile modules
+        run: python -m compileall -q .
+      - name: Run all unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Verify installable CLI distribution
+        run: |
+          python -m pip install --no-deps .
+          cd /tmp
+          aru-evidence --help > /dev/null
+          aru-gateway --help > /dev/null
+          aru-squad --help > /dev/null
+          aru-llm-squad --help > /dev/null
+          aru-power --help > /dev/null
+          aru-anytime --help > /dev/null
+          aru-local-model --help > /dev/null
+          aru-llm-paired --help > /dev/null
+          aru-ground --help > /dev/null
+          aru-qa-proof --help > /dev/null
+          aru-qa-serve --help > /dev/null
+          aru-source-registry --help > /dev/null
+      - name: Verify prospective pilot sample-size planner
+        run: |
+          aru-power --uplift 0.05 --discordance 0.25 --cluster-size 20 --icc 0.05 --missing 0.1 --grade-cost 1.5 --execution-cost 0.5 > /tmp/aru-pilot-plan.json
+          python - <<'PY'
+          import json
+          report = json.load(open("/tmp/aru-pilot-plan.json"))
+          assert report["requested_tasks_rounded_to_clusters"] >= report["labeled_pairs_required"]
+          assert report["cluster_design_effect"] > 1
+          assert report["estimated_task_execution_and_grading_cost"] > 0
+          print("Prospective pilot plan:", report["requested_tasks_rounded_to_clusters"], "tasks")
+          PY
+      - name: Verify prospective anytime-evidence e-process (synthetic only)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          Path("/tmp/aru-pairs.jsonl").write_text("".join(
+              json.dumps({"baseline": 0, "candidate": 1}) + "\n"
+              for _ in range(40)
+          ))
+          PY
+          aru-anytime --pairs-jsonl /tmp/aru-pairs.jsonl --acknowledge-design-assumptions > /tmp/aru-anytime.json
+          python - <<'PY'
+          import json
+          result = json.load(open("/tmp/aru-anytime.json"))
+          assert result["ever_crossed_threshold"]
+          assert not result["automatic_rollout_permitted"]
+          assert result["n_pairs"] == 40
+          print("Synthetic anytime-evidence test passed; no real-world claims")
+          PY
+      - name: Validate prospective e-process under seeded null and alternative
+        run: |
+          python sequential_validation.py --trials 200 --tasks 150 --seed 20261018 --output demo-report/sequential-validation.json > /dev/null
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("demo-report/sequential-validation.json").read_text())
+          null = report["conditions"]["null"]["crossing_fraction"]
+          alt = report["conditions"]["alternative"]["crossing_fraction"]
+          assert not report["real_world_evidence"]
+          assert 0 <= null <= 0.1
+          assert alt > null
+          print(f"Synthetic anytime null crossing: {null:.3f}; alternative detection: {alt:.3f}")
+          PY
+      - name: Verify original scaffold benchmark
+        run: python benchmark.py --runs 3 > /dev/null
+      - name: Generate labeled synthetic evidence and HTML report
+        run: python experiment_cli.py demo --out-dir demo-report --n 500 --seed 7 > /dev/null
+      - name: Assert synthetic reports cannot authorize rollout
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("demo-report/report.json").read_text())
+          assert report["n_logged"] == 500
+          assert report["label_source_counts"]["synthetic"] == 500
+          assert not report["review_gate"]["candidate_for_human_review"]
+          assert not report["review_gate"]["automatic_rollout_permitted"]
+          assert Path("demo-report/index.html").exists()
+          print("Synthetic guardrails verified")
+          PY
+      - name: Falsify estimators against known analytic truth
+        run: |
+          python scientific_validation.py --trials 10 --n 400 --seed 7 --bootstrap-replicates 100 --json demo-report/validation.json > /dev/null
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path("demo-report/validation.json").read_text())
+          assert result["real_world_validation"] is False
+          assert result["trials"] == 10
+          assert result["estimator_summary"]["snips"]["trials_estimated"] == 10
+          truth = result["analytic_truth"]["uplift"]
+          snips = result["estimator_summary"]["snips"]
+          dr = result["estimator_summary"]["crossfit_dr"]
+          print(f"Synthetic analytic uplift: {truth:.4f}; mean SNIPS: {snips['mean_uplift']:.4f}; SNIPS RMSE: {snips['root_mean_squared_error']:.4f}; DR mean: {dr['mean_uplift']:.4f}")
+          print(f"Bootstrap empirical coverage: {result['bootstrap_interval_coverage']['empirical_coverage']}")
+          print("Synthetic analytic-truth validation completed")
+          PY
+      - name: Attest and verify the synthetic evidence bundle
+        env:
+          ARU_DEMO_HMAC_KEY: synthetic-ci-test-key-not-a-production-secret
+        run: |
+          python experiment_cli.py attest --decisions demo-report/decisions.synthetic.jsonl --labels demo-report/labels.synthetic.jsonl --report-json demo-report/report.json --manifest demo-report/attestation.json --hmac-key-env ARU_DEMO_HMAC_KEY > /dev/null
+          python experiment_cli.py verify --decisions demo-report/decisions.synthetic.jsonl --labels demo-report/labels.synthetic.jsonl --report-json demo-report/report.json --manifest demo-report/attestation.json --hmac-key-env ARU_DEMO_HMAC_KEY > /dev/null
+      - name: Upload synthetic evidence dashboard
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aru-synthetic-evidence-dashboard
+          path: demo-report/
+          retention-days: 14
+
+  human_gold:
+    name: Human-annotated SQuAD sentence retrieval
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch independent Stanford SQuAD dev dataset
+        run: |
+          mkdir -p benchmark-data
+          curl --fail --location --show-error --silent --retry 3 --max-time 120 https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json --output benchmark-data/dev-v1.1.json
+          sha256sum benchmark-data/dev-v1.1.json
+          echo "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9  benchmark-data/dev-v1.1.json" | sha256sum --check
+          test "$(wc -c < benchmark-data/dev-v1.1.json)" -gt 1000000
+      - name: Run external gold-label experiment
+        run: |
+          python squad_benchmark.py --dataset benchmark-data/dev-v1.1.json --out-dir benchmark-report --limit 2000 --seed 20261018 --replicates 400
+      - name: Assert benchmark scope and inspect direct oracle
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("benchmark-report/report.json").read_text())
+          oracle = report["external_benchmark"]
+          assert oracle["n_evaluated"] == 2000
+          assert report["label_source_counts"] == {"external": 2000}
+          assert not report["review_gate"]["automatic_rollout_permitted"]
+          assert abs(oracle["difference"] - (oracle["candidate_accuracy"] - oracle["baseline_accuracy"])) < 1e-12
+          print("HUMAN-ANNOTATED SENTENCE RETRIEVAL (not LLM evaluation)")
+          print("Baseline accuracy:", oracle["baseline_accuracy"])
+          print("Candidate accuracy:", oracle["candidate_accuracy"])
+          print("Direct difference:", oracle["difference"])
+          print("Exact paired McNemar (independence-limited):", oracle["exact_mcnemar_descriptive"])
+          print("Paired oracle interval:", oracle["paired_question_interval"])
+          print("Paragraph-cluster interval:", oracle["paired_paragraph_cluster_interval"])
+          print("Article-cluster interval:", oracle["paired_article_cluster_interval"])
+          print("Negative article domains:", oracle["negative_article_count"])
+          for domain in oracle["article_diagnostics"]:
+              if domain["n"] >= 20 and domain["difference"] < -0.05:
+                  print("REGRESSION DOMAIN:", domain["article"], "n=", domain["n"],
+                        "baseline=", domain["baseline_accuracy"],
+                        "candidate=", domain["candidate_accuracy"])
+          print("Off-policy absolute error:", report["full_information_crosscheck"]["absolute_estimator_error"])
+          for stress in oracle["topic_mix_stress"]:
+              print("ADVERSARIAL TOPIC MIX:", stress["requested_tv_budget"],
+                    "worst_case_uplift=", stress["worst_case_uplift"])
+          print("BREAK-EVEN TOPIC SHIFT RADIUS:", oracle["break_even_topic_shift_tv"])
+          print("OPE SNIPS difference:", report["paired_difference"]["snips_difference"])
+          print("Dataset SHA256:", oracle["dataset_sha256"])
+          PY
+      - name: Upload benchmark reports (not the raw dataset)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aru-human-gold-evidence
+          path: |
+            benchmark-report/index.html
+            benchmark-report/report.json
+            benchmark-report/oracle.json
+          retention-days: 14
+
+  real_local_model:
+    name: Real open-weight LLM · public human-gold QA
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 2
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU-only open-model runtime (not a mock)
+        run: |
+          python -m pip install --disable-pip-version-check torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check transformers==4.48.3 safetensors==0.5.3
+      - name: Fetch independently human-annotated public benchmark
+        run: |
+          mkdir -p benchmark-data
+          curl --fail --location --show-error --silent --retry 3 --max-time 120 https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json --output benchmark-data/dev-v1.1.json
+          echo "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9  benchmark-data/dev-v1.1.json" | sha256sum --check
+      - name: Start actual open-weight model on loopback
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+          TOKENIZERS_PARALLELISM: 'false'
+        run: |
+          mkdir -p real-model-report
+          sha256sum REAL_MODEL_PROTOCOL.md > real-model-report/protocol.sha256
+          sha256sum GROUNDING_PROTOCOL.md > real-model-report/grounding-protocol.sha256
+          python hf_local_server.py --model HuggingFaceTB/SmolLM2-135M-Instruct --threads 2 --port 1234 --metadata-json real-model-report/model.json > real-model-server.log 2>&1 &
+          echo $! > /tmp/aru-real-model.pid
+          for i in $(seq 1 150); do
+            if curl -fsS --max-time 2 http://127.0.0.1:1234/health > real-model-report/health.json; then
+              echo "Genuine model loaded successfully"
+              cat real-model-report/health.json
+              break
+            fi
+            if ! kill -0 "$(cat /tmp/aru-real-model.pid)" 2>/dev/null; then
+              echo "Model server terminated during initialization"
+              tail -n 80 real-model-server.log
+              exit 1
+            fi
+            sleep 2
+          done
+          test -s real-model-report/health.json || { tail -n 80 real-model-server.log; exit 1; }
+      - name: Smoke-test real-model proof-carrying answer API
+        run: |
+          python - <<'PY'
+          import json
+          import urllib.request
+          from grounding_contract import verify_grounding
+          context = "The telescope was built in Oregon in 1999."
+          body = {
+              "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+              "context": context,
+              "question": "Where was the telescope built?",
+              "max_tokens": 48,
+          }
+          request = urllib.request.Request(
+              "http://127.0.0.1:1234/v1/grounded/answers",
+              data=json.dumps(body).encode("utf-8"),
+              headers={"Content-Type": "application/json",
+                       "X-ARU-Consent": "research-opt-in"},
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=90) as response:
+              result = json.loads(response.read())
+          assert result["automatic_rollout_permitted"] is False
+          assert result["proof"]["source_sha256"]
+          assert result["proof"]["model_revision"]
+          if result["accepted"]:
+              assert verify_grounding(result["proof"], context)
+          else:
+              assert result["answer"] == ""
+          print("REAL-MODEL PROOF API:", "source-verified" if result["accepted"] else "abstained")
+          print("Proof reason:", result["proof"]["reason"])
+          print("No unsupported answer was displayed.")
+          PY
+      - name: Evaluate real model responses against independent human answers
+        run: |
+          python llm_squad_benchmark.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir real-model-report/evaluation \
+            --model HuggingFaceTB/SmolLM2-135M-Instruct \
+            --endpoint http://127.0.0.1:1234/v1/chat/completions \
+            --limit 40 --seed 20261018 --max-tokens 48 --timeout-s 90 \
+            --acknowledge-model-calls
+      - name: Evaluate BOTH frozen prompts on a disjoint 40-question follow-up subset
+        run: |
+          python llm_paired_audit.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir real-model-report/paired-followup \
+            --model HuggingFaceTB/SmolLM2-135M-Instruct \
+            --endpoint http://127.0.0.1:1234/v1/chat/completions \
+            --limit 40 --offset 40 --seed 20261018 \
+            --max-tokens 48 --timeout-s 90 \
+            --acknowledge-model-calls
+      - name: Audit matched human-gold follow-up without claiming superiority
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("real-model-report/paired-followup/paired-report.json").read_text())
+          assert report["kind"] == "actual_open_weight_model_paired_public_human_gold_audit"
+          assert report["offset"] == 40 and report["limit"] == 40
+          assert report["n_requested_calls"] == 80
+          assert report["n_complete_pairs"] >= 36
+          assert report["n_failed_calls"] <= 4
+          assert not report["automatic_rollout_permitted"]
+          assert Path("real-model-report/paired-followup/paired-index.html").exists()
+          direct = report["direct"]
+          print("REAL-MODEL MATCHED FOLLOW-UP (exploratory, public dev set)")
+          print("Complete pairs:", report["n_complete_pairs"])
+          print("Direct prompt mean F1:", direct["baseline_mean_f1"])
+          print("Grounded extractive mean F1:", direct["candidate_mean_f1"])
+          print("Paired F1 difference:", direct["f1_difference"])
+          print("Article-cluster interval:", report["article_cluster_interval"])
+          print("Model calls completed:", report["n_completed_calls"])
+          print("No general intelligence or hidden-holdout claims.")
+          PY
+      - name: Run prospective source-grounding stress test on disjoint questions 80–119
+        run: |
+          python llm_paired_audit.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir real-model-report/proof-carrying-answers \
+            --model HuggingFaceTB/SmolLM2-135M-Instruct \
+            --endpoint http://127.0.0.1:1234/v1/chat/completions \
+            --limit 40 --offset 80 --seed 20261018 \
+            --max-tokens 48 --timeout-s 90 \
+            --acknowledge-model-calls
+      - name: Verify source proofs and quantify coverage/accuracy tradeoff
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("real-model-report/proof-carrying-answers/paired-report.json").read_text())
+          assert report["offset"] == 80 and report["limit"] == 40
+          assert report["n_requested_calls"] == 80
+          assert report["n_complete_pairs"] >= 36
+          assert report["n_failed_calls"] <= 4
+          assert not report["automatic_rollout_permitted"]
+          assert Path("real-model-report/proof-carrying-answers/paired-index.html").exists()
+          gate = report["grounding_contract"]["direct_on_complete_pairs"]
+          assert gate["all_accepted_answers_are_verifiable_source_substrings"]
+          assert gate["unaccepted_outputs_abstain"]
+          for arm_name, arm in report["arms"].items():
+              proof = arm["grounding"]
+              assert proof["accepted"] + proof["rejected"] == arm["completed"]
+              assert 0 <= proof["accepted_fraction"] <= 1
+              assert 0 <= proof["mean_f1_with_abstentions_as_zero"] <= 1
+              print("PROOF-CARRYING ANSWERS:", arm_name,
+                    "accepted:", proof["accepted"],
+                    "rejected:", proof["rejected"],
+                    "coverage:", proof["accepted_fraction"],
+                    "raw_F1:", arm["mean_f1_on_completed_calls"],
+                    "gated_F1:", proof["mean_f1_with_abstentions_as_zero"],
+                    "selective_F1:", proof["selective_f1_on_accepted_only"])
+          print("Raw paired difference:", report["direct"]["f1_difference"])
+          print("Gated paired difference:", gate["f1_difference"])
+          print("These are public dev-set provenance metrics, NOT proof of factual truth.")
+          PY
+      - name: Audit real-model provenance and outcome completeness
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("real-model-report")
+          metadata = json.loads((root / "model.json").read_text())
+          report = json.loads((root / "evaluation" / "report.json").read_text())
+          bench = report["llm_benchmark"]
+          assert metadata["backend"] == "transformers_pytorch_cpu"
+          assert metadata["remote_code_enabled"] is False
+          assert metadata["revision"], "model commit must be recorded"
+          assert bench["n_requested"] == 40
+          assert bench["n_completed"] >= 36
+          assert bench["n_failed"] <= 4
+          assert report["label_source_counts"] == {"external": bench["n_completed"]}
+          assert not report["review_gate"]["automatic_rollout_permitted"]
+          assert (root / "evaluation" / "index.html").exists()
+          print("ACTUAL OPEN-WEIGHT MODEL EXECUTION (public SQuAD development set)")
+          print("Model:", metadata["model"], "revision:", metadata["revision"])
+          print("Completed:", bench["n_completed"], "Failed:", bench["n_failed"])
+          for arm, stats in bench["observed_arms"].items():
+              print("Arm:", arm, "n:", stats["completed"],
+                    "F1:", stats["observed_mean_f1"],
+                    "exact-match:", stats["observed_exact_match"],
+                    "mean-latency:", stats["mean_latency_s"])
+          print("SNIPS baseline:", report["baseline"]["snips"])
+          print("SNIPS candidate:", report["candidate"]["snips"])
+          print("This is a small public-dev-set pilot, NOT general AI validation.")
+          PY
+      - name: Upload real-model evidence without raw prompts or weights
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aru-real-open-weight-model-human-gold
+          path: |
+            real-model-report/model.json
+            real-model-report/protocol.sha256
+            real-model-report/grounding-protocol.sha256
+            real-model-report/health.json
+            real-model-report/evaluation/index.html
+            real-model-report/evaluation/report.json
+            real-model-report/paired-followup/paired-index.html
+            real-model-report/paired-followup/paired-report.json
+            real-model-report/proof-carrying-answers/paired-index.html
+            real-model-report/proof-carrying-answers/paired-report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  specialized_qa:
+    name: Specialized real QA · independent source-proof benchmark
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 2
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU-only pretrained model runtime
+        run: |
+          python -m pip install --disable-pip-version-check torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check transformers==4.48.3 safetensors==0.5.3
+      - name: Fetch and verify official human-annotated dataset
+        run: |
+          mkdir -p benchmark-data specialized-qa-report
+          curl --fail --location --show-error --silent --retry 3 --max-time 120 https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json --output benchmark-data/dev-v1.1.json
+          echo "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9  benchmark-data/dev-v1.1.json" | sha256sum --check
+          sha256sum EXTRACTIVE_QA_PROTOCOL.md > specialized-qa-report/protocol.sha256
+      - name: Start real generative comparator on loopback
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+          TOKENIZERS_PARALLELISM: 'false'
+        run: |
+          python hf_local_server.py --model HuggingFaceTB/SmolLM2-135M-Instruct --threads 2 --port 1234 --metadata-json specialized-qa-report/generative-model.json > specialized-qa-server.log 2>&1 &
+          echo $! > /tmp/aru-qa-llm.pid
+          for i in $(seq 1 150); do
+            if curl -fsS --max-time 2 http://127.0.0.1:1234/health > specialized-qa-report/health.json; then
+              echo "Genuine comparator model loaded"
+              break
+            fi
+            if ! kill -0 "$(cat /tmp/aru-qa-llm.pid)" 2>/dev/null; then
+              tail -n 80 specialized-qa-server.log
+              exit 1
+            fi
+            sleep 2
+          done
+          test -s specialized-qa-report/health.json || { tail -n 80 specialized-qa-server.log; exit 1; }
+      - name: Run real specialized extractive QA and real generative comparator
+        env:
+          HF_HUB_DISABLE_TELEMETRY: '1'
+          TOKENIZERS_PARALLELISM: 'false'
+        run: |
+          python qa_proof_benchmark.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir specialized-qa-report/evaluation \
+            --qa-model distilbert/distilbert-base-cased-distilled-squad \
+            --llm-model HuggingFaceTB/SmolLM2-135M-Instruct \
+            --llm-endpoint http://127.0.0.1:1234/v1/chat/completions \
+            --limit 80 --offset 120 --seed 20261018 \
+            --max-tokens 48 --timeout-s 90 \
+            --acknowledge-model-calls
+      - name: Verify real-model revisions, independent scoring and source coverage
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("specialized-qa-report")
+          report = json.loads((root / "evaluation/report.json").read_text())
+          provenance = json.loads((root / "generative-model.json").read_text())
+          assert report["kind"] == "real_pretrained_extractive_qa_vs_small_llm_public_dev"
+          assert report["offset"] == 120 and report["limit"] == 80
+          assert report["qa_revision"] and provenance["revision"]
+          assert report["gold_answers_visible_to_models"] is False
+          assert report["n_complete_pairs"] >= 72
+          assert report["arms"]["qa"]["accepted"] >= 72
+          assert report["arms"]["qa"]["completed"] >= 72
+          assert report["automatic_rollout_permitted"] is False
+          assert (root / "evaluation/index.html").is_file()
+          print("REAL SPECIALIZED QA:", report["qa_model"], report["qa_revision"])
+          print("REAL GENERATIVE COMPARATOR:", provenance["model"], provenance["revision"])
+          print("Matched questions:", report["n_complete_pairs"], "Failures:", report["failures"])
+          for name, arm in report["arms"].items():
+              print("ARM", name, "coverage:", arm["accepted_fraction"],
+                    "mean F1:", arm["mean_f1"], "exact match:", arm["exact_match"],
+                    "latency:", arm["mean_latency_s"])
+          print("Paired QA minus raw LLM F1:", report["direct_qa_minus_raw_llm_f1"])
+          print("Article-cluster interval:", report["article_cluster_interval"])
+          print("Public dev-set task-specific research, NOT general AI superiority.")
+          PY
+      - name: Upload specialized QA evidence without raw text or weights
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aru-specialized-qa-human-gold
+          path: |
+            specialized-qa-report/protocol.sha256
+            specialized-qa-report/generative-model.json
+            specialized-qa-report/health.json
+            specialized-qa-report/evaluation/index.html
+            specialized-qa-report/evaluation/report.json
+          if-no-files-found: warn
+          retention-days: 14

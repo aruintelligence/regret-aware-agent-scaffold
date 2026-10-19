@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#071321">
+  <meta name="description" content="ĀRU Decision Evidence Lab: auditable AI decision experiments, independently graded outcomes and human-governed review.">
+  <meta property="og:title" content="ĀRU Decision Evidence Lab — Decisions That Carry Evidence">
+  <meta property="og:description" content="A reproducible research platform for evaluating and stress-testing AI routing decisions.">
+  <meta property="og:type" content="website">
+  <title>ĀRU Decision Evidence Lab | Evidence for Every Decision</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="nav">
+    <a class="brand" href="#top">ĀRU <b>✦</b> INTELLIGENCE</a>
+    <nav aria-label="Main navigation"><a href="#proof">Proof</a><a href="#system">Technology</a><a href="#safety">Safeguards</a><a href="#pilot">Pilot ↗</a></nav>
+  </header>
+  <main id="top">
+    <section class="hero">
+      <span class="pill">Research alpha · evidence-first AI evaluation</span>
+      <h1>AI decisions<br>that <em>carry evidence.</em></h1>
+      <p class="lede">Measure what an AI workflow actually accomplishes, how reliable the comparison is, and where a seemingly better decision policy could still fail.</p>
+      <div class="buttons"><a class="button primary" href="#proof">Explore the measured result ↗</a><a class="button secondary" href="https://github.com/aruintelligence/regret-aware-agent-scaffold/pull/2">Inspect the source code</a></div>
+      <p class="muted tiny">Research prototype. Not a production-certified system, autonomous rollout engine, or proof of general intelligence.</p>
+    </section>
+    <section class="section" id="proof">
+      <span class="eyebrow">01 / Measured, not imagined</span>
+      <h2>A real benchmark.<br>A result you can reproduce.</h2>
+      <p>Two deterministic sentence-retrieval algorithms were evaluated against human-annotated answer locations on 2,000 questions from the Stanford SQuAD v1.1 development set. Neither algorithm saw the gold answers.</p>
+      <div class="stats">
+        <div class="stat"><strong>2,000</strong><small>Human-annotated questions</small></div>
+        <div class="stat"><strong>78.5%</strong><small>Lexical baseline accuracy</small></div>
+        <div class="stat"><strong class="aqua">82.1%</strong><small>Challenger accuracy</small></div>
+        <div class="stat"><strong class="aqua">+3.6 pp</strong><small>Measured sentence-retrieval gain</small></div>
+      </div>
+      <div class="split">
+        <div class="panel">
+          <div class="metric"><span>Baseline · token overlap</span><b>78.5%</b></div>
+          <div class="meter"><div style="width:78.5%"></div></div>
+          <div class="metric"><span>Challenger · IDF + proximity</span><b>82.1%</b></div>
+          <div class="meter gold"><div style="width:82.1%"></div></div>
+          <p class="tiny muted">Exploratory 95% article-cluster interval for the difference: +2.47 to +4.61 percentage points (48 articles).</p>
+        </div>
+        <div>
+          <span class="eyebrow">Truth includes limitations</span>
+          <h3>We show the misses, too.</h3>
+          <p>The challenger performed worse in one observed topic. ĀRU flagged the regression rather than declaring universal superiority.</p>
+          <p><b class="gold-text">Victoria (Australia):</b> baseline 72%; challenger 64% on 25 questions. This small subgroup result is exploratory.</p>
+          <a class="button secondary" href="https://github.com/aruintelligence/regret-aware-agent-scaffold/blob/innovation/off-policy-evaluation-20261018/BENCHMARK_EVIDENCE.md">Read the evidence record ↗</a>
+        </div>
+      </div>
+    </section>
+    <section class="section" id="system">
+      <span class="eyebrow">02 / Evidence-carrying architecture</span>
+      <h2>From decision to defensible record.</h2>
+      <div class="flow">
+        <div><span>01</span><b>Route</b><small>Log the selection probability.</small></div>
+        <div><span>02</span><b>Execute</b><small>Run the task or local model.</small></div>
+        <div><span>03</span><b>Grade</b><small>Use independent outcomes.</small></div>
+        <div><span>04</span><b>Evaluate</b><small>Estimate, stress-test, audit.</small></div>
+        <div><span>05</span><b>Review</b><small>Keep a human in control.</small></div>
+      </div>
+      <div class="cards">
+        <article><span>MEASUREMENT</span><h3>Counterfactual evidence</h3><p>IPS, SNIPS, doubly robust diagnostics, propensity checks and uncertainty estimates.</p></article>
+        <article><span>TRACEABILITY</span><h3>Evidence passports</h3><p>Local SQLite logging, HMAC audit chains, and reproducible HTML and JSON reports.</p></article>
+        <article><span>CONTROL</span><h3>Regret-aware safeguards</h3><p>Detect missing outcomes, weak support, domain regressions and adversarial topic-mix risk.</p></article>
+      </div>
+    </section>
+    <section class="section" id="proof-carrying">
+      <span class="eyebrow">03 / Proof-carrying answers · research preview</span>
+      <h2>Show the source.<br>Or choose not to answer.</h2>
+      <p>ĀRU's experimental grounding contract only accepts short AI answers that can be verified as an exact source span. A certificate records the source fingerprint and character offsets so another system can check the claim without trusting the model's confidence.</p>
+      <div class="proof-grid">
+        <div class="proof-visual" aria-label="Illustration of source-backed answer verification">
+          <div class="proof-tag">SOURCE PASSAGE</div>
+          <p>The telescope was in <mark>Oregon</mark>.</p>
+          <div class="proof-divider" aria-hidden="true">↓ VERIFY SOURCE SPAN</div>
+          <div class="proof-tag">ANSWER CERTIFICATE</div>
+          <div class="proof-row"><span>Displayed answer</span><strong>Oregon</strong></div>
+          <div class="proof-row"><span>Character offsets</span><strong>21–27</strong></div>
+          <div class="proof-row"><span>Source fingerprint</span><strong>SHA-256</strong></div>
+          <div class="proof-state">✓ Source span verified</div>
+        </div>
+        <div class="proof-copy">
+          <h3>A narrow guarantee that can be checked.</h3>
+          <p>If a model generates an answer absent from the passage, the contract abstains. The research report measures how many answers were withheld and how much accuracy was lost or retained.</p>
+          <p><strong>What this does not prove:</strong> that the source is trustworthy, the answer is relevant, or the statement is factually true. Those are separate research and engineering requirements.</p>
+          <p class="tiny muted">A real 135M-parameter model has completed 120 public-data calls across initial and matched evaluations. The matched restrictive prompt scored 21.50% F1 versus 23.53% for the direct prompt; no quality advantage was demonstrated.</p>
+          <a class="button secondary" href="https://github.com/aruintelligence/regret-aware-agent-scaffold/blob/innovation/off-policy-evaluation-20261018/GROUNDING_PROTOCOL.md">Read the grounding protocol ↗</a>
+        </div>
+      </div>
+    </section>
+    <section class="section" id="evidence-quorum">
+      <span class="eyebrow">04 / Evidence Quorum · multi-source research preview</span>
+      <h2>When documents disagree,<br>the system refuses to guess.</h2>
+      <p>A single citation can be misleading. ĀRU's experimental Evidence Quorum checks each short answer against its own source, requires distinct approved source fingerprints, and quarantines contradictory verified answers rather than silently choosing one.</p>
+      <div class="quorum-grid">
+        <article class="quorum-card">
+          <span class="quorum-tag">VERIFIED AGREEMENT</span>
+          <div class="quorum-source"><span>Approved source A</span><strong>Oregon</strong></div>
+          <div class="quorum-source"><span>Approved source B</span><strong>Oregon</strong></div>
+          <div class="quorum-outcome positive">✓ Source agreement · eligible to display</div>
+          <p class="tiny muted">Both answers must have valid source offsets and different document fingerprints. Agreement is not proof of factual truth.</p>
+        </article>
+        <article class="quorum-card">
+          <span class="quorum-tag">CONFLICT QUARANTINE</span>
+          <div class="quorum-source"><span>Approved source A</span><strong>Oregon</strong></div>
+          <div class="quorum-source"><span>Approved source B</span><strong>Washington</strong></div>
+          <div class="quorum-outcome caution">! Conflicting evidence · abstain</div>
+          <p class="tiny muted">Even if one answer reaches the quorum, a conflicting verified source blocks acceptance until a human investigates.</p>
+        </article>
+      </div>
+      <p class="tiny muted">Research prototype only. Purpose-scoped revocable source grants, authenticated loopback access and independently recomputed receipts are implemented; source trust, entailment and production security remain separate requirements.</p>
+      <a class="button secondary" href="https://github.com/aruintelligence/regret-aware-agent-scaffold/blob/feature/evidence-quorum-20261019/EVIDENCE_QUORUM.md">Explore the Evidence Quorum design ↗</a>
+    </section>
+    <section class="section" id="safety">
+      <span class="eyebrow">05 / Sovereignty by design</span>
+      <h2>Evidence before expansion.</h2>
+      <div class="callout"><strong>Automatic rollout is disabled.</strong><p>A statistical screen can recommend further investigation, never silently deploy a new policy. The local gateway requires an API key and an explicit research opt-in header. Enterprise-grade authentication, encryption, retention controls and security audits remain future work.</p></div>
+      <p class="tiny muted">Adversarial observed-topic stress test: a 10% total-variation shift leaves an estimated +1.59-point uplift; a 20% shift nearly eliminates it. The empirical break-even radius is approximately 20.09%. This is not a guarantee about unseen tasks.</p>
+    </section>
+    <section class="cta" id="pilot">
+      <span class="eyebrow">06 / Explore a design partnership</span>
+      <h2>Build the next standard for AI decision assurance.</h2>
+      <p>ĀRU is seeking technically qualified design partners to validate a workflow, define independent outcome rubrics, and test evidence-first agent evaluation. Commercial availability and pricing are not established.</p>
+      <div class="buttons"><a class="button primary" href="mailto:office@aruintelligence.com?subject=Decision%20Evidence%20Lab%20Design%20Partner">Discuss a research pilot ↗</a><a class="button secondary" href="https://github.com/aruintelligence/regret-aware-agent-scaffold/blob/innovation/off-policy-evaluation-20261018/DESIGN_PARTNER_PILOT.md">Explore the six-week pilot</a></div>
+    </section>
+  </main>
+  <footer><span>© 2026 ĀRU Intelligence contributors · Experimental research</span><span>Open-source MIT core · SQuAD dataset credited to its creators · No production claims</span></footer>
+</div>
+</body>
+</html>

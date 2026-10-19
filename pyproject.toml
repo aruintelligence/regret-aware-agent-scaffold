@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aru-decision-evidence-lab"
+version = "0.2.0"
+description = "Experimental evidence-first evaluation of agent routing decisions"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+authors = [
+  {name = "ĀRU Intelligence contributors"}
+]
+keywords = ["ai-evaluation", "off-policy-evaluation", "decision-audit", "agent-routing"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []
+
+[project.optional-dependencies]
+real-model = ["torch==2.5.1", "transformers==4.48.3", "safetensors==0.5.3"]
+
+[project.scripts]
+aru-evidence = "experiment_cli:main"
+aru-gateway = "evidence_gateway:main"
+aru-squad = "squad_benchmark:main"
+aru-llm-squad = "llm_squad_benchmark:main"
+aru-local-model = "hf_local_server:main"
+aru-llm-paired = "llm_paired_audit:main"
+aru-ground = "grounding_contract:main"
+aru-qa-proof = "qa_proof_benchmark:main"
+aru-qa-serve = "qa_local_server:main"
+aru-source-registry = "source_registry_cli:main"
+aru-power = "pilot_power:main"
+aru-anytime = "anytime_evidence:main"
+
+[tool.setuptools]
+py-modules = [
+  "regret_aware_scaffold",
+  "benchmark",
+  "off_policy_evaluation",
+  "route_experiments",
+  "evidence_lab",
+  "crossfit_diagnostics",
+  "distribution_robustness",
+  "evidence_dashboard",
+  "evidence_audit",
+  "evidence_checkpoint",
+  "paired_inference",
+  "pilot_power",
+  "anytime_evidence",
+  "sequential_validation",
+  "experiment_cli",
+  "external_adapter",
+  "scientific_validation",
+  "squad_sentence_retrieval",
+  "squad_benchmark",
+  "llm_executor",
+  "hf_local_server",
+  "llm_squad_benchmark",
+  "llm_paired_audit",
+  "grounding_contract",
+  "evidence_quorum",
+  "quorum_registry_adapter",
+  "extractive_qa_engine",
+  "qa_proof_benchmark",
+  "qa_local_server",
+  "sovereign_source_registry",
+  "source_registry_cli",
+  "source_registry_anchor",
+  "evidence_gateway_store",
+  "evidence_gateway",
+]

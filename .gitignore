@@ -1,3 +1,26 @@
 __pycache__/
 *.pyc
 route_memory*.json
+
+# Experiment data and reports can contain sensitive task signatures or outcomes.
+experiment-data/
+demo-report/
+decisions*.jsonl
+labels*.jsonl
+*.synthetic.jsonl
+evidence-report*.json
+evidence-report*.html
+
+# Local benchmark/model artifacts and SQLite research data
+benchmark-data/
+benchmark-report/
+local-llm-report/
+dev-v1.1.json
+*.db
+*.db-wal
+*.db-shm
+
+# Optional package build artifacts
+*.egg-info/
+build/
+dist/

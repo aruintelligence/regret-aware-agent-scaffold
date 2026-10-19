@@ -1,0 +1,79 @@
+name: Human-annotated SQuAD retrieval benchmark
+
+on:
+  push:
+    branches:
+      - innovation/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  human-gold-evaluation:
+    name: Independent gold-label sentence retrieval
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run benchmark regression tests
+        run: python -m unittest discover -s tests -v
+      - name: Download official SQuAD v1.1 dev data (not committed)
+        run: |
+          mkdir -p benchmark-data
+          curl --fail --location --show-error --silent --retry 3 --max-time 120 \
+            https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json \
+            --output benchmark-data/dev-v1.1.json
+          sha256sum benchmark-data/dev-v1.1.json
+          echo "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9  benchmark-data/dev-v1.1.json" | sha256sum --check
+          test "$(wc -c < benchmark-data/dev-v1.1.json)" -gt 1000000
+      - name: Evaluate two real retrieval algorithms against human annotations
+        run: |
+          python squad_benchmark.py \
+            --dataset benchmark-data/dev-v1.1.json \
+            --out-dir benchmark-report \
+            --limit 2000 --seed 20261018 --replicates 400
+      - name: Verify full-information and logged-policy evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("benchmark-report/report.json").read_text())
+          oracle = report["external_benchmark"]
+          assert oracle["n_evaluated"] == 2000
+          assert report["n_labeled"] == 2000
+          assert report["label_source_counts"] == {"external": 2000}
+          assert report["review_gate"]["automatic_rollout_permitted"] is False
+          assert 0 <= oracle["baseline_accuracy"] <= 1
+          assert 0 <= oracle["candidate_accuracy"] <= 1
+          assert abs(oracle["difference"] - (oracle["candidate_accuracy"] - oracle["baseline_accuracy"])) < 1e-12
+          assert Path("benchmark-report/index.html").exists()
+          print("Independent human-gold evaluation completed.")
+          print("Direct baseline accuracy:", oracle["baseline_accuracy"])
+          print("Direct candidate accuracy:", oracle["candidate_accuracy"])
+          print("Direct difference:", oracle["difference"])
+          print("Exact paired McNemar (independence-limited):", oracle["exact_mcnemar_descriptive"])
+          print("Paired oracle interval:", oracle["paired_question_interval"])
+          print("Paragraph-cluster interval:", oracle["paired_paragraph_cluster_interval"])
+          print("Article-cluster interval:", oracle["paired_article_cluster_interval"])
+          print("Negative article domains:", oracle["negative_article_count"])
+          print("Off-policy absolute error:", report["full_information_crosscheck"]["absolute_estimator_error"])
+          print("Off-policy SNIPS difference:", report["paired_difference"]["snips_difference"])
+          print("Dataset SHA256:", oracle["dataset_sha256"])
+          PY
+      - name: Upload report only (do not redistribute SQuAD dataset)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aru-human-gold-squad-sentence-retrieval
+          path: |
+            benchmark-report/index.html
+            benchmark-report/report.json
+            benchmark-report/oracle.json
+          retention-days: 14
