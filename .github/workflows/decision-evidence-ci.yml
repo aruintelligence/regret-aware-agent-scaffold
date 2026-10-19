@@ -44,6 +44,18 @@ jobs:
           assert Path("demo-report/index.html").exists()
           print("Synthetic guardrails verified")
           PY
+      - name: Falsify estimators against known analytic truth
+        run: |
+          python scientific_validation.py --trials 10 --n 400 --seed 7 --bootstrap-replicates 100 --json demo-report/validation.json > /dev/null
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path("demo-report/validation.json").read_text())
+          assert result["real_world_validation"] is False
+          assert result["trials"] == 10
+          assert result["estimator_summary"]["snips"]["trials_estimated"] == 10
+          print("Synthetic analytic-truth validation completed")
+          PY
       - name: Attest and verify the synthetic evidence bundle
         env:
           ARU_DEMO_HMAC_KEY: synthetic-ci-test-key-not-a-production-secret
