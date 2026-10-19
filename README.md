@@ -171,3 +171,14 @@ print(event["decision_id"])  # Join an independent outcome later.
 ```
 
 The adapter validates full-support categorical probabilities, their sum, candidate identity, and the logged propensity. **It cannot verify that the external system actually used those probabilities**. Never infer or invent propensities retrospectively, and do not submit tasks where randomized exploration would create unacceptable risk. The adapter is not a production API: there is no authentication, concurrency control, encryption, consent workflow, or verified executor integration. Those remain explicit engineering requirements.
+
+
+### Falsification benchmark: known ground truth
+
+`scientific_validation.py` generates a contextual bandit with three routes, three task signatures, and **published analytic reward probabilities**. Unlike a self-scoring demo, the true expected policy uplift is known from the simulator's explicit probability table. Repeated randomized trials measure IPS, SNIPS, and cross-fitted DR estimation bias, absolute error, RMSE, and exploratory interval coverage:
+
+```bash
+python3 scientific_validation.py --trials 40 --n 900 --seed 7 --json validation.json
+```
+
+This is a genuine, falsifiable **software/statistics test**, but it is **not evidence of a better real-world AI**: the reward-generating distribution is artificial, the tasks are scripted, and no independent customer outcomes are used. Passing such a test means the estimators behave plausibly on this specified environment. The next scientific milestone is a prospective, externally graded, held-out evaluation on real tasks with an agreed baseline and budget.
