@@ -71,6 +71,20 @@ jobs:
           assert result["n_pairs"] == 40
           print("Synthetic anytime-evidence test passed; no real-world claims")
           PY
+      - name: Validate prospective e-process under seeded null and alternative
+        run: |
+          python sequential_validation.py --trials 200 --tasks 150 --seed 20261018 --output demo-report/sequential-validation.json > /dev/null
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("demo-report/sequential-validation.json").read_text())
+          null = report["conditions"]["null"]["crossing_fraction"]
+          alt = report["conditions"]["alternative"]["crossing_fraction"]
+          assert not report["real_world_evidence"]
+          assert 0 <= null <= 0.1
+          assert alt > null
+          print(f"Synthetic anytime null crossing: {null:.3f}; alternative detection: {alt:.3f}")
+          PY
       - name: Verify original scaffold benchmark
         run: python benchmark.py --runs 3 > /dev/null
       - name: Generate labeled synthetic evidence and HTML report
