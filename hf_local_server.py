@@ -19,6 +19,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from grounding_contract import ground_answer, verify_grounding
+
 DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-135M-Instruct"
 MAX_REQUEST_BYTES = 30000
 MAX_NEW_TOKENS = 128
@@ -123,9 +125,17 @@ def make_handler(engine):
                 self.respond(404, {"error": "not_found"})
 
         def do_POST(self):
-            if self.path != "/v1/chat/completions":
+            if self.path not in ("/v1/chat/completions", "/v1/grounded/answers"):
                 self.respond(404, {"error": "not_found"})
                 return
+            grounded = self.path == "/v1/grounded/answers"
+            if grounded:
+                if self.headers.get("X-ARU-Consent") != "research-opt-in":
+                    self.respond(403, {"error": "explicit_research_consent_header_required"})
+                    return
+                if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
+                    self.respond(415, {"error": "application_json_required"})
+                    return
             try:
                 size = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -144,10 +154,46 @@ def make_handler(engine):
                     raise ValueError("only deterministic temperature=0 supported")
                 if request.get("model") != engine.model_id:
                     raise ValueError("model identifier does not match loaded model")
-                response = engine.generate(
-                    request["messages"],
-                    max_tokens=request.get("max_tokens", 96),
-                )
+                if grounded:
+                    if set(request) - {"model", "context", "question", "max_tokens"}:
+                        raise ValueError("unexpected grounded request fields")
+                    context = request["context"]
+                    question = request["question"]
+                    if not isinstance(context, str) or not isinstance(question, str):
+                        raise ValueError("context and question must be text")
+                    if not context or len(context) > 25000 or not question or len(question) > 2000:
+                        raise ValueError("context or question length invalid")
+                    # Use the same frozen extractive prompt as the real-model benchmark.
+                    messages = [
+                        {"role": "system", "content":
+                         "You are an extractive question-answering engine. "
+                         "Find the shortest exact text span from the passage that answers "
+                         "the question. Return only that span verbatim. No explanations, "
+                         "no invented facts. If absent, return UNKNOWN."},
+                        {"role": "user", "content":
+                         "Passage:\n" + context + "\n\nQuestion:\n" + question},
+                    ]
+                    raw = engine.generate(
+                        messages, max_tokens=request.get("max_tokens", 48),
+                    )
+                    model_text = raw["choices"][0]["message"]["content"]
+                    proof = ground_answer(model_text, context, model_revision=engine.revision)
+                    if proof["accepted"] and not verify_grounding(proof, context):
+                        raise RuntimeError("independent source proof check failed")
+                    response = {
+                        "model": engine.model_id,
+                        "accepted": proof["accepted"],
+                        "answer": proof["answer"],
+                        "proof": proof,
+                        "usage": raw.get("usage", {}),
+                        "automatic_rollout_permitted": False,
+                        "warning": "Source substring provenance only, not factual correctness or entailment.",
+                    }
+                else:
+                    response = engine.generate(
+                        request["messages"],
+                        max_tokens=request.get("max_tokens", 96),
+                    )
             except (KeyError, ValueError, TypeError):
                 self.respond(422, {"error": "invalid_model_request"})
                 return
