@@ -1,5 +1,10 @@
 import copy
+import json
+import subprocess
+import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 from grounding_contract import ground_answer, verify_grounding
 
@@ -64,6 +69,38 @@ class GroundingContractTests(unittest.TestCase):
         modified = copy.deepcopy(proof)
         modified["source_sha256"] = "0" * 64
         self.assertFalse(verify_grounding(modified, source))
+
+    def test_local_cli_certifies_and_verifies_without_network(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            context = root / "context.txt"
+            answer = root / "answer.txt"
+            proof = root / "proof.json"
+            context.write_text("The observatory is in Oregon.", encoding="utf-8")
+            answer.write_text("Oregon", encoding="utf-8")
+            script = str(Path(__file__).resolve().parents[1] / "grounding_contract.py")
+            result = subprocess.run(
+                [sys.executable, script, "certify", "--context-file", str(context),
+                 "--answer-file", str(answer), "--out", str(proof)],
+                check=True, capture_output=True, text=True,
+            )
+            self.assertTrue(json.loads(result.stdout)["accepted"])
+            self.assertTrue(proof.is_file())
+            check = subprocess.run(
+                [sys.executable, script, "verify", "--context-file", str(context),
+                 "--proof-file", str(proof)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(check.returncode, 0)
+            self.assertTrue(json.loads(check.stdout)["verified"])
+            context.write_text("The observatory is in Washington.", encoding="utf-8")
+            tampered = subprocess.run(
+                [sys.executable, script, "verify", "--context-file", str(context),
+                 "--proof-file", str(proof)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(tampered.returncode, 1)
+            self.assertFalse(json.loads(tampered.stdout)["verified"])
 
     def test_refuses_unstructured_oversized_and_empty_answers(self):
         source = "The telescope was in Oregon."
