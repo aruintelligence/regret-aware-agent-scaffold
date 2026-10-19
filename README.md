@@ -351,3 +351,17 @@ The anchor is not a trusted timestamp, transparency service, WORM store, or thir
 ### Exact paired evidence (independence-limited)
 
 The human-gold benchmark additionally reports an exact two-sided McNemar discordance test: the count of questions uniquely solved by the baseline versus those uniquely solved by the challenger. It uses exact integer binomial arithmetic, not an asymptotic approximation. Because SQuAD questions share paragraphs and articles, the independent-question assumption is violated; **this p-value is descriptive and must not be promoted as confirmatory significance**. Article-cluster bootstrap sensitivity intervals remain the more relevant reported dependence check.
+
+
+## Prospective pilot sample-size and budget planner
+
+`pilot_power.py` adds a **transparent, operator-controlled experimental design tool** for paired binary task outcomes. It computes an approximate required sample using the assumed improvement, discordant-pair rate, desired two-sided alpha/power, mean cluster size, intracluster correlation, expected missingness, and operator-supplied task costs.
+
+```bash
+aru-power --uplift 0.05 --discordance 0.25 \
+  --power 0.8 --alpha 0.05 \
+  --cluster-size 20 --icc 0.05 --missing 0.10 \
+  --grade-cost 1.50 --execution-cost 0.50
+```
+
+This is **planning math, not a validated forecast of success**. The normal approximation and simple cluster design effect are not suitable for adaptive bandits, SNIPS/DR estimation, sequential stopping, unequal clusters, or nonbinary outcomes. A real customer pilot should use an independent statistician, preregistered rubrics and sample-size assumptions, and appropriate design-specific simulation.
