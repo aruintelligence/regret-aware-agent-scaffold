@@ -339,6 +339,11 @@ aru-gateway anchor --db experiment-data/gateway.db \
 # Verify later. Exits nonzero on tampering, truncation, or wrong anchor key.
 aru-gateway verify-anchor --db experiment-data/gateway.db \
   --checkpoint /path/to/independently-retained/checkpoint-001.json
+
+# Optional: refuse to generate a report unless the external anchor verifies.
+aru-gateway report --db experiment-data/gateway.db \
+  --out-dir experiment-data/anchored-report \
+  --anchor-checkpoint /path/to/independently-retained/checkpoint-001.json
 ```
 
 The anchor is not a trusted timestamp, transparency service, WORM store, or third-party attestation. **Both the anchor and its secret must be protected independently of the SQLite database and gateway key.** A stolen anchor key can sign a forged checkpoint, and no checkpoint proves that newer, unanchored events were not deleted. The included regression tests intentionally delete the final SQLite event: the original HMAC chain still passes, while the independently anchored verifier correctly rejects the truncated database.
