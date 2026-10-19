@@ -122,6 +122,7 @@ jobs:
           print("Baseline accuracy:", oracle["baseline_accuracy"])
           print("Candidate accuracy:", oracle["candidate_accuracy"])
           print("Direct difference:", oracle["difference"])
+          print("Exact paired McNemar (independence-limited):", oracle["exact_mcnemar_descriptive"])
           print("Paired oracle interval:", oracle["paired_question_interval"])
           print("Paragraph-cluster interval:", oracle["paired_paragraph_cluster_interval"])
           print("Article-cluster interval:", oracle["paired_article_cluster_interval"])
