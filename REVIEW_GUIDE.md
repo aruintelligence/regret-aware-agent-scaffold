@@ -15,7 +15,8 @@ The original `MasterAgentRuntime`, CLI behavior and internal cold/warm benchmark
 | Robustness and diagnostics | `crossfit_diagnostics.py`, `distribution_robustness.py` | Cross-fitting, domain regressions, adversarial topic-mix constraints |
 | Real human-gold benchmark | `squad_sentence_retrieval.py`, `squad_benchmark.py` | No gold-answer leakage, dataset hash, direct-vs-logged comparisons |
 | Opt-in real model path | `llm_executor.py`, `llm_squad_benchmark.py` | Local-only default, explicit consent, redirect blocking, gold F1 |
-| Evidence provenance | `evidence_audit.py` | HMAC verification, downgrade rejection, manifest limitations |
+| Evidence provenance | `evidence_audit.py`, `evidence_checkpoint.py` | HMAC verification, downgrade rejection, independent key checkpoint, tail-truncation detection |
+| Paired inference | `paired_inference.py` | Exact McNemar discordance arithmetic and dependence caveat |
 | Local ingestion service | `evidence_gateway_store.py`, `evidence_gateway.py` | SQLite transactions, idempotency, schema allowlists, consent header, concurrency |
 | CLI and reporting | `experiment_cli.py`, `evidence_dashboard.py` | Reproducible reports, accessible HTML, no automatic rollout |
 | Public-facing research page | `docs/index.html`, `docs/styles.css` | Accurate claims, mobile readability, attribution, no deployed claims |
@@ -43,7 +44,7 @@ For the human-annotated benchmark, download the official SQuAD v1.1 dev JSON and
 2. **Public development set:** not an untouched private holdout. Do not tune the algorithm on this data and continue describing it as a fresh confirmatory test.
 3. **Incomplete causal guarantees:** inverse-propensity estimators require honest prospective propensities, support and appropriate dependence assumptions. Exploratory bootstrap is not automatically valid for adaptive data.
 4. **Gateway is local-only research infrastructure:** no TLS, SSO/RBAC, tenant isolation, encryption at rest, backup/retention/deletion API, or security audit.
-5. **HMAC limits:** a key holder or privileged database administrator can rewrite history; an external trusted anchor is required for stronger provenance.
+5. **HMAC limits:** an unanchored HMAC chain silently accepts a deleted tail. A separately keyed checkpoint now detects truncation or rewrite **relative to the last retained anchor**. A key holder or privileged administrator can still rewrite history if the independent checkpoint/key are also compromised; external retention remains necessary.
 6. **Consent limits:** the research opt-in header is self-attested and does not replace verified human consent or privacy compliance.
 7. **External model path not live-tested:** HTTP behavior is covered by a mock server; a real local model has not been connected or independently scored.
 8. **Public MIT license:** commercial reuse by third parties is permitted; verify contributor rights before asserting exclusivity or negotiating proprietary licensing.
