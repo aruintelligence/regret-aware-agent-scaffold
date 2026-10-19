@@ -54,6 +54,11 @@ jobs:
           assert result["real_world_validation"] is False
           assert result["trials"] == 10
           assert result["estimator_summary"]["snips"]["trials_estimated"] == 10
+          truth = result["analytic_truth"]["uplift"]
+          snips = result["estimator_summary"]["snips"]
+          dr = result["estimator_summary"]["crossfit_dr"]
+          print(f"Synthetic analytic uplift: {truth:.4f}; mean SNIPS: {snips['mean_uplift']:.4f}; SNIPS RMSE: {snips['root_mean_squared_error']:.4f}; DR mean: {dr['mean_uplift']:.4f}")
+          print(f"Bootstrap empirical coverage: {result['bootstrap_interval_coverage']['empirical_coverage']}")
           print("Synthetic analytic-truth validation completed")
           PY
       - name: Attest and verify the synthetic evidence bundle
