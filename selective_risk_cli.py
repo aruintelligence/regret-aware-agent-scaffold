@@ -76,6 +76,9 @@ def main():
     check.add_argument("--rubric-id", required=True)
     verify = sub.add_parser("verify", help="Verify policy HMAC without accessing calibration data")
     verify.add_argument("--policy", required=True)
+    dashboard = sub.add_parser("dashboard", help="Render standalone signed-evidence HTML dashboard")
+    dashboard.add_argument("--policy", required=True)
+    dashboard.add_argument("--out", required=True)
     args = parser.parse_args()
     try:
         key = _key()
@@ -105,6 +108,12 @@ def main():
             print(json.dumps({"policy_hmac_verified": valid}))
             if not valid:
                 raise SystemExit(1)
+        elif args.command == "dashboard":
+            from selective_risk_dashboard import save_risk_dashboard
+            saved = save_risk_dashboard(
+                _read_json(args.policy), key=key, output_path=args.out,
+            )
+            print(json.dumps({"dashboard": saved, "policy_hmac_verified": True}))
         else:
             result = apply_selective_risk_gate(
                 _read_json(args.policy), key=key,
