@@ -17,6 +17,7 @@ from extractive_qa_engine import DEFAULT_QA_MODEL, ExtractiveQAEngine
 from grounding_contract import verify_grounding
 from sovereign_source_registry import authorize_source
 from source_registry_anchor import verify_source_checkpoint
+from quorum_registry_adapter import evaluate_registered_quorum
 
 MAX_BODY = 30000
 
@@ -63,7 +64,7 @@ def make_handler(engine, api_key, *, registry_db=None, registry_key=None,
                 })
 
         def do_POST(self):
-            if self.path != "/v1/qa/proof":
+            if self.path not in ("/v1/qa/proof", "/v1/qa/quorum"):
                 self.respond(404, {"error": "not_found"})
                 return
             header = self.headers.get("Authorization", "")
@@ -87,6 +88,27 @@ def make_handler(engine, api_key, *, registry_db=None, registry_key=None,
                 return
             try:
                 payload = json.loads(self.rfile.read(size))
+                if self.path == "/v1/qa/quorum":
+                    if not isinstance(payload, dict) or set(payload) - {
+                        "model", "question", "sources",
+                        "min_distinct_sources", "max_answer_tokens",
+                    }:
+                        raise ValueError("invalid quorum request fields")
+                    if payload.get("model") != engine.model_id:
+                        raise ValueError("quorum model does not match loaded model")
+                    receipt = evaluate_registered_quorum(
+                        engine,
+                        registry_db=registry_db, registry_key=registry_key,
+                        registry_checkpoint=registry_checkpoint,
+                        registry_anchor_key=registry_anchor_key,
+                        owner=self.headers.get("X-ARU-Owner", ""),
+                        question=payload["question"],
+                        sources=payload["sources"],
+                        min_distinct_sources=payload.get("min_distinct_sources", 2),
+                        max_answer_tokens=payload.get("max_answer_tokens", 30),
+                    )
+                    self.respond(200, receipt)
+                    return
                 if not isinstance(payload, dict) or set(payload) - {
                     "model", "context", "question", "max_answer_tokens",
                 }:
@@ -145,12 +167,21 @@ def make_handler(engine, api_key, *, registry_db=None, registry_key=None,
                     "source_authorization": {
                         "kind": "operator_attested_purpose_scoped_registry",
                         "grant_id": source_authorization["grant_id"],
+                        "purpose": "qa_source",
+                        "independent_checkpoint_verified": registry_checkpoint is not None,
+                        "human_identity_verified": False,
+                        "legal_consent_verified": False,
+                        "raw_source_stored_by_registry": False,
                     } if source_authorization else {
                         "kind": "research_header_only_no_verified_consent",
+                        "human_identity_verified": False,
+                        "legal_consent_verified": False,
                     },
                     "automatic_rollout_permitted": False,
                     "warning": "Exact source-span provenance only; not factual correctness or entailment.",
                 })
+            except PermissionError:
+                self.respond(403, {"error": "source_not_authorized_or_revoked"})
             except (ValueError, KeyError, TypeError):
                 self.respond(422, {"error": "invalid_request"})
             except Exception:
