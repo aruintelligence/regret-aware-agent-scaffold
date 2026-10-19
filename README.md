@@ -491,3 +491,8 @@ else:
 ```
 
 This is a **local research endpoint, not an authenticated production service**. The consent header is a caller acknowledgement, not verified user consent. Never expose the model server to the public internet or send private customer data through this prototype. A valid source substring can still be factually wrong or irrelevant.
+
+
+## Design partner commercial pilot package
+
+[DESIGN_PARTNER_PILOT.md](DESIGN_PARTNER_PILOT.md) contains a **nonbinding six-week, $20,000 proposed pilot** with scoped deliverables, independent grading, measurable acceptance criteria, human-governed rollout, privacy and IP gates, and illustrative—not validated—delivery economics. The fee is a sales hypothesis, not an established market price. The pilot should not begin until customer authorization, data classification, security review and appropriate agreements are complete.
