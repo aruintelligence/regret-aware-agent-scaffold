@@ -18,6 +18,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from evidence_dashboard import save_dashboard
+from distribution_robustness import topic_mix_stress_table
 from evidence_lab import evaluate_experiment
 from route_experiments import action_id, append_jsonl, validate_decision
 from squad_sentence_retrieval import (
@@ -186,6 +187,7 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
         "paired_paragraph_cluster_interval": cluster_oracle_interval(by_paragraph, replicates=replicates, seed=seed + 2),
         "paired_article_cluster_interval": cluster_oracle_interval(by_article, replicates=replicates, seed=seed + 3),
         "article_diagnostics": article_diagnostics,
+        "topic_mix_stress": topic_mix_stress_table(article_diagnostics),
         "negative_article_count": len(negative_articles),
         "audit_examples": examples,
         "scope": "human-annotated sentence retrieval, not LLM question answering",
@@ -196,6 +198,13 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
         replicates=replicates, seed=seed,
     )
     report["external_benchmark"] = direct
+    stress_at_ten = next(item for item in direct["topic_mix_stress"]
+                         if abs(item["requested_tv_budget"] - 0.10) < 1e-12)
+    if stress_at_ten["worst_case_uplift"] <= 0:
+        report["review_gate"]["candidate_for_human_review"] = False
+        report["review_gate"]["reasons"].insert(
+            0, "A 10% adversarial observed-topic mix shift removes the measured uplift; investigate"
+        )
     if negative_articles:
         report["review_gate"]["candidate_for_human_review"] = False
         report["review_gate"]["reasons"].insert(
@@ -214,6 +223,9 @@ def run_benchmark(dataset_path, output_dir, *, limit=2000,
     )
     report["limitations"].append(
         "Article/paragraph cluster bootstrap intervals account for within-cluster correlation only approximately; they are exploratory, not confirmatory."
+    )
+    report["limitations"].append(
+        "Adversarial topic-mix stress tests reweight only observed articles while assuming their conditional success rates remain fixed; they are not statistical confidence bounds."
     )
     report["limitations"].append(
         "Full-information outcomes are used solely for the offline audit; only the randomized chosen reward enters the off-policy estimator."
