@@ -42,6 +42,8 @@ py-modules = [
   "distribution_robustness",
   "evidence_dashboard",
   "evidence_audit",
+  "evidence_checkpoint",
+  "paired_inference",
   "experiment_cli",
   "external_adapter",
   "scientific_validation",
