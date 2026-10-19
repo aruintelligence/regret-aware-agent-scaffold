@@ -170,3 +170,90 @@ def fit_selective_risk_policy(rows, *, thresholds, groups,
             "Statistical screening never authorizes deployment or proves answer truth.",
         ],
     }
+
+
+def sign_risk_policy(policy, *, key):
+    """HMAC-sign the exact calibrated policy with a separately controlled key."""
+    if not isinstance(key, bytes) or len(key) < 32:
+        raise ValueError("risk signing key must be at least 32 bytes")
+    if not isinstance(policy, dict) or policy.get("schema_version") != 1 or "policy_hmac_sha256" in policy:
+        raise ValueError("unsigned version-1 policy required")
+    signed = dict(policy)
+    signed["policy_hmac_sha256"] = hmac.new(
+        key, _canonical(policy).encode("utf-8"), hashlib.sha256,
+    ).hexdigest()
+    return signed
+
+
+def verify_risk_policy(policy, *, key):
+    if not isinstance(key, bytes) or len(key) < 32 or not isinstance(policy, dict):
+        return False
+    digest = policy.get("policy_hmac_sha256")
+    if not isinstance(digest, str) or len(digest) != 64:
+        return False
+    unsigned = {k: v for k, v in policy.items() if k != "policy_hmac_sha256"}
+    try:
+        actual = hmac.new(key, _canonical(unsigned).encode("utf-8"), hashlib.sha256).hexdigest()
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(digest, actual) and policy.get("schema_version") == 1
+
+
+def apply_selective_risk_gate(policy, *, key, score, group,
+                              source_proof, source_text,
+                              model_revision, rubric_id):
+    """Release only if signed policy, score, group and source proof all pass.
+
+    Callers must derive group from trusted routing metadata, not an
+    untrusted model response or user-controlled request field.
+    """
+    base = {
+        "accepted": False, "answer": "",
+        "reason": "denied", "automatic_rollout_permitted": False,
+        "warning": "A source span is not factual truth. Statistical risk bounds require IID calibration and future data.",
+    }
+    if not verify_risk_policy(policy, key=key):
+        return {**base, "reason": "unsigned_or_modified_policy"}
+    if policy.get("kind") != "aru_selective_risk_calibration" or policy.get("automatic_rollout_permitted") is not False:
+        return {**base, "reason": "unsupported_policy"}
+    if not policy.get("conditional_risk_screen_passed") or policy.get("selected_threshold") is None:
+        return {**base, "reason": "no_risk_qualified_threshold"}
+    if model_revision != policy.get("model_revision") or rubric_id != policy.get("rubric_id"):
+        return {**base, "reason": "model_or_rubric_mismatch"}
+    if group not in policy.get("groups", []):
+        return {**base, "reason": "unrecognized_group"}
+    if not _valid_number(score):
+        return {**base, "reason": "invalid_score"}
+    if score < policy["selected_threshold"]:
+        return {**base, "reason": "score_below_threshold"}
+    if not verify_grounding(source_proof, source_text):
+        return {**base, "reason": "invalid_source_certificate"}
+    # Check signed per-group risk bounds at release time too, not merely
+    # a top-level boolean that might have been set incorrectly at fit time.
+    matches = [c for c in policy.get("candidates", [])
+               if c.get("threshold") == policy["selected_threshold"] and c.get("eligible") is True]
+    if len(matches) != 1:
+        return {**base, "reason": "inconsistent_policy_threshold"}
+    candidate = matches[0]
+    group_slice = candidate.get("slices", {}).get(group)
+    aggregate = candidate.get("slices", {}).get("__all__")
+    if not isinstance(group_slice, dict) or not isinstance(aggregate, dict):
+        return {**base, "reason": "missing_group_evidence"}
+    for evidence in (group_slice, aggregate):
+        if (not evidence.get("meets_target")
+                or evidence.get("accepted", 0) < policy.get("min_group_support", 1)
+                or not _valid_number(evidence.get("simultaneous_error_upper"))
+                or evidence["simultaneous_error_upper"] > policy["target_error"]):
+            return {**base, "reason": "insufficient_group_risk_evidence"}
+    return {
+        **base, "accepted": True, "answer": source_proof["answer"],
+        "reason": "signed_risk_screen_and_source_span_verified",
+        "calibration_set_id": policy["calibration_set_id"],
+        "group": group,
+        "risk_upper_bound": max(
+            group_slice["simultaneous_error_upper"],
+            aggregate["simultaneous_error_upper"],
+        ),
+        "target_error": policy["target_error"],
+        "policy_hmac_sha256": policy["policy_hmac_sha256"],
+    }
