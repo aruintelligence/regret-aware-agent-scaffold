@@ -63,12 +63,34 @@ aru-source-registry revoke --db private-research/consent.db \
 
 A revoked or expired grant cannot authorize subsequent requests. A new grant requires another explicit operator attestation.
 
+### Independently anchored revocation history
+
+A normal HMAC event chain cannot detect deletion of the final revocation record. For stronger evidence, create a **separate-key checkpoint after the revocation** and retain that checkpoint under independent control:
+
+```bash
+export ARU_SOURCE_ANCHOR_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+aru-source-registry anchor --db private-research/consent.db \
+  --checkpoint independently-retained/consent-after-revocation.json
+
+aru-source-registry verify-anchor --db private-research/consent.db \
+  --checkpoint independently-retained/consent-after-revocation.json
+
+# Optional: require this checkpoint before the local QA API runs a model.
+aru-qa-serve \
+  --source-registry-db private-research/consent.db \
+  --source-anchor-checkpoint independently-retained/consent-after-revocation.json
+```
+
+The QA server now **fails closed** when a configured independent checkpoint does not verify. A regression test deliberately deletes a revoked grant's final event, shows that the original chain still verifies, and confirms that the anchored QA server denies access.
+
+**Important:** create and independently retain a new checkpoint promptly after every meaningful consent change. An old checkpoint cannot detect deletion of *newer, unanchored* revocations. A checkpoint stored alongside the database and accessible to the same administrator does not provide a strong independent trust boundary.
+
 ## Security boundaries and important non-claims
 
 1. **No verified user identity.** The owner header is caller-supplied. A bearer-token holder can impersonate another owner within this single-operator research environment. Production requires authenticated user identities and binding grants to that identity.
 2. **No independently verified consent.** The CLI records an operator's assertion. Actual legal consent, source ownership and data-processing rights must be checked separately.
 3. **No encrypted source storage because no source is stored.** The SQLite database still holds metadata and is not encrypted at rest. Keyed fingerprints reduce exposure but do not remove metadata risks.
-4. **No tail-deletion resistance without external anchoring.** A privileged actor may delete the final HMAC events and leave a valid shorter prefix. An independently retained checkpoint or external append-only transparency service is required before claiming durable revocation evidence.
+4. **Tail-deletion protection depends on a separately retained checkpoint.** The optional independent HMAC checkpoint detects rollback of the anchored prefix. Deletion of later, unanchored revocations remains possible. Stronger durable revocation evidence requires prompt external anchoring and independently controlled storage.
 5. **No instant in-flight cancellation.** Revocation blocks requests that check authorization afterward; it does not cancel an inference already running.
 6. **No multi-tenancy or public deployment.** Local loopback, bearer key and consent header are research controls, not production SSO, RBAC, TLS, verified consent, or tenant isolation.
 7. **No factual guarantee.** A permitted source can be inaccurate, malicious or irrelevant; a valid source-span certificate proves provenance only.
