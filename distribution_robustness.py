@@ -79,3 +79,35 @@ def topic_mix_stress_table(article_diagnostics, budgets=(0.05, 0.10, 0.20)):
         worst_case_topic_mix(values, weights, tv_budget=budget)
         for budget in budgets
     ]
+
+
+def break_even_topic_shift(article_diagnostics, *, tolerance=1e-5):
+    """Smallest observed-domain total-variation shift that removes positive uplift.
+
+    Returns None if every attainable reweighting of the observed domains
+    retains positive empirical uplift. This does not protect unseen domains.
+    """
+    if not article_diagnostics:
+        raise ValueError("article diagnostics required")
+    total = sum(row["n"] for row in article_diagnostics)
+    if total <= 0:
+        raise ValueError("positive question counts required")
+    values = [row["difference"] for row in article_diagnostics]
+    weights = [row["n"] / total for row in article_diagnostics]
+    initial = worst_case_topic_mix(values, weights, tv_budget=0)
+    if initial["observed_uplift"] <= 0:
+        return 0.0
+    maximum = worst_case_topic_mix(values, weights, tv_budget=1)
+    if maximum["worst_case_uplift"] > 0:
+        return None
+    if not 0 < tolerance < 0.1:
+        raise ValueError("tolerance must be between 0 and 0.1")
+    low, high = 0.0, 1.0
+    while high - low > tolerance:
+        mid = (low + high) / 2
+        outcome = worst_case_topic_mix(values, weights, tv_budget=mid)
+        if outcome["worst_case_uplift"] > 0:
+            low = mid
+        else:
+            high = mid
+    return high
