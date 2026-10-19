@@ -10,3 +10,12 @@ labels*.jsonl
 *.synthetic.jsonl
 evidence-report*.json
 evidence-report*.html
+
+# Local benchmark/model artifacts and SQLite research data
+benchmark-data/
+benchmark-report/
+local-llm-report/
+dev-v1.1.json
+*.db
+*.db-wal
+*.db-shm
