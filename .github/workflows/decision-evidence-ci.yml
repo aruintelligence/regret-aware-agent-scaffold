@@ -42,6 +42,7 @@ jobs:
           aru-power --help > /dev/null
           aru-anytime --help > /dev/null
           aru-local-model --help > /dev/null
+          aru-llm-paired --help > /dev/null
       - name: Verify prospective pilot sample-size planner
         run: |
           aru-power --uplift 0.05 --discordance 0.25 --cluster-size 20 --icc 0.05 --missing 0.1 --grade-cost 1.5 --execution-cost 0.5 > /tmp/aru-pilot-plan.json
