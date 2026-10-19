@@ -123,3 +123,16 @@ A policy passing this statistical screen is a **research recommendation for huma
 `selective_risk_dashboard.py` produces a responsive standalone HTML research dashboard with the chosen threshold, calibration coverage, predeclared target, every threshold's subgroup error count, observed error and exact simultaneous upper bound. The dashboard refuses an invalid HMAC and includes **no raw calibration rows, passages or generated answers**. Its labels and warnings emphasize that a statistical screen does not permit automatic rollout.
 
 This is an operator-review artifact, not a remotely hosted SaaS or a cryptographically immutable public transparency record.
+
+
+## ĀRU Sovereign Risk Pipeline — consent + risk + proof
+
+`sovereign_risk_adapter.py` integrates three previously separate safeguards into one **fail-closed local research flow**:
+
+1. **Source sovereignty:** `sovereign_source_registry.authorize_source` checks a purpose-scoped, expiring, revocable operator-attested source grant. Missing, expired, wrong-owner, wrong-purpose or corrupted records deny inference.
+2. **Independent revocation checkpoint (optional):** `source_registry_anchor.verify_source_checkpoint` checks an independently retained, separately keyed HMAC anchor *before* authorization. A regression test deletes the last revocation from SQLite: the retained checkpoint detects the truncation and prevents model execution. Unanchored events remain vulnerable to suffix deletion.
+3. **Statistical risk + source proof:** the HMAC-signed risk policy is pinned to an expected calibration-set ID and exact model/rubric. The model runs only after source authorization, and its output is released only if the score and independently verified source certificate satisfy the calibrated gate.
+
+The composition is testable: revocation, unknown owner, wrong purpose, replayed calibration policy, missing checkpoint key and deleted revocation all return an empty answer **without calling the model**.
+
+**Consent remains operator-attested, not legally verified.** A privileged actor with the keys can forge evidence, and authorization is not atomic with final HTTP delivery; an operator could revoke during inference. Production deployment requires transactional authorization at the delivery boundary, verified human consent, privacy controls and external security review.
