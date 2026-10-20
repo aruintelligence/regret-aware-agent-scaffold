@@ -229,9 +229,21 @@ def verify_witness_quorum(statement, approvals, *, trusted_witness_public_keys,
     }
 
 
-def record_witness_head(state_path, statement):
-    """Advance a verifier-owned SQLite head atomically; refuse rollback/forks."""
-    digest = statement_fingerprint(statement)
+def _witness_policy_digest(trusted_witness_public_keys):
+    """Fingerprint the exact identity-to-key map, including identity labels."""
+    if (not isinstance(trusted_witness_public_keys, dict)
+            or len(trusted_witness_public_keys) < 2):
+        raise ValueError("at least two witness keys required")
+    fingerprints = {}
+    for witness_id, public_key in trusted_witness_public_keys.items():
+        _id(witness_id, "witness_id")
+        fingerprints[witness_id] = public_key_fingerprint(public_key)
+    if len(set(fingerprints.values())) != len(fingerprints):
+        raise ValueError("duplicate witness public key")
+    return _digest(fingerprints)
+
+
+def _private_state_target(state_path):
     target = Path(state_path)
     if str(target) == ":memory:" or target.is_symlink() or not target.is_file():
         raise ValueError("initialized on-disk witness state required")
@@ -240,6 +252,25 @@ def record_witness_head(state_path, statement):
             or (os.name == "posix" and (
                 (info.st_mode & 0o077) != 0 or info.st_uid != os.getuid()))):
         raise ValueError("witness state must be private to the verifier")
+    return target
+
+
+def _verify_pinned_witness_policy(state_path, trusted_witness_public_keys):
+    """Reject a caller map that differs from the host's setup-time policy."""
+    digest = _witness_policy_digest(trusted_witness_public_keys)
+    target = _private_state_target(state_path)
+    with sqlite3.connect(str(target), timeout=10) as db:
+        row = db.execute(
+            "SELECT policy_sha256 FROM witness_policy WHERE id=1"
+        ).fetchone()
+    if row is None or not hmac.compare_digest(row[0], digest):
+        raise ValueError("caller witness map differs from pinned verifier policy")
+
+
+def record_witness_head(state_path, statement):
+    """Advance a verifier-owned SQLite head atomically; refuse rollback/forks."""
+    digest = statement_fingerprint(statement)
+    target = _private_state_target(state_path)
     with sqlite3.connect(str(target), timeout=10) as db:
         db.execute("PRAGMA synchronous=FULL")
         db.execute(
@@ -275,8 +306,10 @@ def record_witness_head(state_path, statement):
             "statement_sha256": digest, "automatic_rollout_permitted": False}
 
 
-def initialize_witness_state(state_path):
-    """Host-only, exclusive creation of a private persistent rollback store."""
+def initialize_witness_state(state_path, *, trusted_witness_public_keys=None):
+    """Create private state; release verifiers must pin their witness map."""
+    policy_digest = (_witness_policy_digest(trusted_witness_public_keys)
+                     if trusted_witness_public_keys is not None else None)
     target = Path(state_path)
     if str(target) == ":memory:" or not target.parent.is_dir():
         raise ValueError("persistent witness-state directory required")
@@ -289,8 +322,42 @@ def initialize_witness_state(state_path):
             "CREATE TABLE witness_heads (cohort_id TEXT PRIMARY KEY, "
             "epoch INTEGER NOT NULL, statement_sha256 TEXT NOT NULL)"
         )
+        if policy_digest is not None:
+            db.execute(
+                "CREATE TABLE witness_policy (id INTEGER PRIMARY KEY CHECK(id=1), "
+                "policy_sha256 TEXT NOT NULL)"
+            )
+            db.execute("INSERT INTO witness_policy VALUES (1,?)", (policy_digest,))
         db.commit()
     return str(target)
+
+
+def pin_existing_witness_state(state_path, *, trusted_witness_public_keys):
+    """Attach a host policy to an existing private DB without clearing heads.
+
+    This setup action requires the host to authenticate the historical head
+    and key map before calling; it cannot recover history lost before pinning.
+    """
+    digest = _witness_policy_digest(trusted_witness_public_keys)
+    target = _private_state_target(state_path)
+    with sqlite3.connect(str(target), timeout=10) as db:
+        db.execute("PRAGMA synchronous=FULL")
+        db.execute("BEGIN IMMEDIATE")
+        # Require an initialized state with its existing history intact.
+        db.execute("SELECT cohort_id FROM witness_heads LIMIT 1").fetchone()
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS witness_policy ("
+            "id INTEGER PRIMARY KEY CHECK(id=1), policy_sha256 TEXT NOT NULL)"
+        )
+        current = db.execute(
+            "SELECT policy_sha256 FROM witness_policy WHERE id=1"
+        ).fetchone()
+        if current is None:
+            db.execute("INSERT INTO witness_policy VALUES (1,?)", (digest,))
+        elif not hmac.compare_digest(current[0], digest):
+            raise ValueError("witness policy already pinned to different keys")
+        db.commit()
+    return digest
 
 
 def gate_with_witnessed_public_grades(policy, *, statement, witness_approvals,
@@ -318,6 +385,8 @@ def gate_with_witnessed_public_grades(policy, *, statement, witness_approvals,
             statement, witness_approvals,
             trusted_witness_public_keys=trusted_witness_public_keys,
         )
+        _verify_pinned_witness_policy(witness_state_path,
+                                      trusted_witness_public_keys)
         ingress = gate_options["ingress_checkpoint"]
         if (statement["cohort_id"] != ingress["cohort_id"]
                 or statement["cohort_id"] != grade_checkpoint["cohort_id"]
