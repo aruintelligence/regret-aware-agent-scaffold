@@ -285,11 +285,14 @@ jobs:
           sha256sum RECEIPT_CHALLENGE_PROTOCOL.md > prospective-ledger-report/receipt-protocol.sha256
       - name: Provision ephemeral separate keys for the CI-only experiment
         run: |
-          python - <<'PY' >> "$GITHUB_ENV"
-          import secrets
-          print('ARU_ISSUED_SIGNING_KEY=' + secrets.token_urlsafe(48))
-          print('ARU_WATCH_SIGNING_KEY=' + secrets.token_urlsafe(48))
-          print('ARU_RECEIPT_SIGNING_KEY=' + secrets.token_urlsafe(48))
+          python - <<'PY'
+          import os, secrets
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as environment:
+              for name in ('ARU_ISSUED_SIGNING_KEY', 'ARU_WATCH_SIGNING_KEY',
+                           'ARU_RECEIPT_SIGNING_KEY'):
+                  value = secrets.token_urlsafe(48)
+                  print('::add-mask::' + value, flush=True)
+                  environment.write(name + '=' + value + '\n')
           PY
       - name: Freeze issued question cohort before model initialization
         id: prepare
