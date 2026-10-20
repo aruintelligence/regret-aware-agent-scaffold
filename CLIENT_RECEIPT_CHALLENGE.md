@@ -43,6 +43,8 @@ The test suite issues a receipt for each of 120 synthetic sequence positions, in
 
 The [frozen follow-on protocol](RECEIPT_CHALLENGE_PROTOCOL.md) added CI-prepared receipt claims before another real-model run. The [measured results and exact evidence](RECEIPT_CHALLENGE_RESULTS.md) account for 120/120 claims, model calls and grades. The original audit protocol and its recorded hash remain intact. CI preparation did not deliver a receipt to an independently controlled customer.
 
+An [independent receipt-cohort ledger](RECEIPT_COHORT_LEDGER.md) can also close the issuer's *entire* receipt log and require one-to-one agreement with the ingress manifest before the release gate. The customer's held copy remains useful if the issuer's own log omits their receipt.
+
 ## Limits and deployment requirements
 
 The HMAC only authenticates a claim made by the receipt issuer. The CLI cannot prove the receipt was handed to the customer at request time, that the ingress row was durably recorded, that a request was executed, or that a grade is true. The issuer and ingress operator must be independent for a conflict to be meaningful; a compromised or colluding receipt issuer can sign after the fact. A request that never receives a receipt remains invisible to this control. The current schema cannot distinguish two receipts for the **same** five-field issue row; unique ID and sequence assignment needs an audited atomic ingress implementation. The nonce gives receipts distinct bytes but is not bound into the manifest.

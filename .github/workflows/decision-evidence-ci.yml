@@ -180,6 +180,36 @@ jobs:
           assert not challenge(changed, close(changed))["included"]
           print("Synthetic receipt challenge detected a signed-manifest rewrite.")
           PY
+      - name: Deny a separately signed receipt/ingress cohort mismatch
+        run: |
+          python - <<'PY'
+          from client_request_receipt import issue_request_receipt
+          from receipt_cohort_ledger import create_receipt_checkpoint, reconcile_receipt_cohort
+          from watch_outcome_ledger import create_issued_checkpoint
+          issuer = b"synthetic-receipt-issuer-key-32-separate"
+          ingress = b"synthetic-ingress-store-key-32-separate"
+          issued = [dict(sequence=i, request_id=f"request-{i}", group="general",
+                         model_revision="fixed", rubric_id="v1") for i in range(1, 31)]
+          receipts = [issue_request_receipt(row, cohort_id="ci-demo", receipt_key=issuer)
+                      for row in issued]
+          received = create_receipt_checkpoint(receipts, cohort_id="ci-demo",
+              groups=["general"], model_revision="fixed", rubric_id="v1",
+              receipt_key=issuer)
+          def ingress_anchor(rows):
+              return create_issued_checkpoint(rows, cohort_id="ci-demo", groups=["general"],
+                  model_revision="fixed", rubric_id="v1", ingress_key=ingress)
+          def audit(rows):
+              anchor = ingress_anchor(rows)
+              return reconcile_receipt_cohort(receipts, rows, receipt_checkpoint=received,
+                  ingress_checkpoint=anchor, receipt_key=issuer, ingress_key=ingress,
+                  expected_current_receipt_hmac_sha256=received["receipt_ledger_hmac_sha256"],
+                  expected_current_ingress_hmac_sha256=anchor["ingress_hmac_sha256"])
+          assert audit(issued)["status"] == "complete"
+          changed = [*issued]
+          changed[17] = {**issued[17], "request_id": "silently-replaced"}
+          assert audit(changed)["conflict_sequences"] == [18]
+          print("Synthetic independent receipt log exposed a validly signed ingress rewrite.")
+          PY
       - name: Verify original scaffold benchmark
         run: python benchmark.py --runs 3 > /dev/null
       - name: Generate labeled synthetic evidence and HTML report

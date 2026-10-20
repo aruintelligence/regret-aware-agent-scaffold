@@ -85,6 +85,7 @@ py-modules = [
   "anytime_risk_watch_cli",
   "watch_outcome_ledger",
   "client_request_receipt",
+  "receipt_cohort_ledger",
   "watch_outcome_ledger_cli",
   "prospective_ledger_audit",
   "real_model_watch_audit",

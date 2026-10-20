@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 from client_request_receipt import challenge_request_receipt, issue_request_receipt
+from receipt_cohort_ledger import create_receipt_checkpoint, reconcile_receipt_cohort
 from watch_outcome_ledger import (
     create_issued_checkpoint, reconcile_issued_grades, verify_complete_report,
 )
@@ -57,6 +58,20 @@ def main():
     challenge.add_argument("--checkpoint", required=True)
     challenge.add_argument("--expected-checkpoint-hmac", required=True,
                            help="Current HMAC from a separately controlled checkpoint store")
+    receipt_anchor = sub.add_parser("receipt-anchor", help="Close the independent receipt issuer log")
+    receipt_anchor.add_argument("--receipts-jsonl", required=True)
+    receipt_anchor.add_argument("--cohort-id", required=True)
+    receipt_anchor.add_argument("--groups", required=True)
+    receipt_anchor.add_argument("--model-revision", required=True)
+    receipt_anchor.add_argument("--rubric-id", required=True)
+    receipt_anchor.add_argument("--out", required=True)
+    receipt_audit = sub.add_parser("receipt-audit", help="Reconcile two current closed issuance logs")
+    receipt_audit.add_argument("--receipts-jsonl", required=True)
+    receipt_audit.add_argument("--issued-jsonl", required=True)
+    receipt_audit.add_argument("--receipt-checkpoint", required=True)
+    receipt_audit.add_argument("--ingress-checkpoint", required=True)
+    receipt_audit.add_argument("--expected-receipt-hmac", required=True)
+    receipt_audit.add_argument("--expected-checkpoint-hmac", required=True)
     anchor = sub.add_parser("anchor", help="Sign the closed issued cohort with the ingress key")
     anchor.add_argument("--issued-jsonl", required=True)
     anchor.add_argument("--cohort-id", required=True)
@@ -87,7 +102,32 @@ def main():
             _exclusive_json(args.out, result)
             print(json.dumps({"receipt": args.out, "sequence": result["sequence"]}))
             return
+        if args.command == "receipt-anchor":
+            checkpoint = create_receipt_checkpoint(
+                _rows(args.receipts_jsonl), cohort_id=args.cohort_id,
+                groups=[group.strip() for group in args.groups.split(",")],
+                model_revision=args.model_revision, rubric_id=args.rubric_id,
+                receipt_key=_key("ARU_RECEIPT_SIGNING_KEY"),
+            )
+            _exclusive_json(args.out, checkpoint)
+            print(json.dumps({"checkpoint": args.out,
+                              "receipt_count": checkpoint["receipt_count"],
+                              "receipt_ledger_hmac_sha256": checkpoint["receipt_ledger_hmac_sha256"]}))
+            return
         ingress_key = _key("ARU_ISSUED_SIGNING_KEY")
+        if args.command == "receipt-audit":
+            result = reconcile_receipt_cohort(
+                _rows(args.receipts_jsonl), _rows(args.issued_jsonl),
+                receipt_checkpoint=_object(args.receipt_checkpoint),
+                ingress_checkpoint=_object(args.ingress_checkpoint),
+                receipt_key=_key("ARU_RECEIPT_SIGNING_KEY"), ingress_key=ingress_key,
+                expected_current_receipt_hmac_sha256=args.expected_receipt_hmac,
+                expected_current_ingress_hmac_sha256=args.expected_checkpoint_hmac,
+            )
+            print(json.dumps(result, sort_keys=True))
+            if result["status"] != "complete":
+                raise SystemExit(5)
+            return
         if args.command == "challenge":
             result = challenge_request_receipt(
                 _object(args.receipt), _rows(args.issued_jsonl),
