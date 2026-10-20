@@ -91,6 +91,7 @@ py-modules = [
   "grade_attestation_ledger",
   "public_grade_ledger",
   "public_grade_cli",
+  "grader_witness_quorum",
   "watch_outcome_ledger_cli",
   "prospective_ledger_audit",
   "real_model_watch_audit",
