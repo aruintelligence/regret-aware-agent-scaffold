@@ -66,6 +66,16 @@ jobs:
           aru-watch --help > /dev/null
           aru-watch-ledger --help > /dev/null
           aru-grade-public --help > /dev/null
+          aru-witness-demo > /tmp/aru-witness-demo-installed.json
+          python - <<'PY'
+          import json
+          report = json.load(open('/tmp/aru-witness-demo-installed.json'))
+          assert report['status'] == 'all_expected_boundaries_observed'
+          assert report['synthetic_fixture'] and report['model_calls'] == 0
+          assert report['honest_epoch_1_accepted'] and report['honest_epoch_2_accepted']
+          assert len(report['attacks']) == 5
+          assert all(not case['accepted'] for case in report['attacks'])
+          PY
           aru-watch-prospective-audit --help > /dev/null
           aru-watch-real-audit --help > /dev/null
           aru-watch-change-point-audit --help > /dev/null

@@ -29,13 +29,13 @@ From this repository with Python 3.9 or newer:
 
 ```bash
 python3 -m pip install '.[public-grader]'
-python3 witness_gate_demo.py
+aru-witness-demo
 python3 -m unittest -v tests.test_grader_witness_quorum
 python3 -m unittest -v tests.test_receipt_cohort_ledger tests.test_public_grade_ledger
 python3 -m unittest discover -s tests -q
 ```
 
-The demo prints JSON showing an honest 40-request **synthetic fixture** accepted at epochs 1 and 2, five rejected attack attempts, and a low-level self-fed quorum that the pinned gate refuses. It exits nonzero on any unexpected acceptance. It imports repository test fixtures and uses public test keys; it makes **zero model calls** and is intended to run from the checkout. The archived real-model files, frozen protocols, limitations and run provenance are linked above. Unit tests use constructed evidence; they do not rerun model inference. GitHub Actions runs the regression suite on supported Python versions and the archived model workflows; inspect the current PR's checks for their actual status.
+The installed demo can run from any directory. It prints JSON showing an honest 40-request **synthetic fixture** accepted at epochs 1 and 2, five rejected attack attempts, and a low-level self-fed quorum that the pinned gate refuses. It exits nonzero on any unexpected acceptance. It uses published demo keys and makes **zero model calls**. The archived real-model files, frozen protocols, limitations and run provenance are linked above. Unit tests use constructed evidence; they do not rerun model inference. GitHub Actions runs the regression suite on supported Python versions and the archived model workflows; inspect the current PR's checks for their actual status.
 
 ## A bounded design-partner offer
 

@@ -1,7 +1,7 @@
-"""Offline falsification demo using only the repository's synthetic test fixture.
+"""Offline falsification demo using only published synthetic inputs.
 
-Run from this checkout: python3 witness_gate_demo.py
-No model is called, no customer evidence is used, and test-only keys are public.
+Run after installing the public-grader extra: aru-witness-demo
+No model is called, no customer evidence is used, and demo keys are public.
 """
 from __future__ import annotations
 
@@ -16,16 +16,15 @@ from grader_witness_quorum import (
     sign_witness_statement, statement_fingerprint, verify_witness_quorum,
 )
 from public_grade_ledger import public_key_fingerprint
-from tests.test_grader_witness_quorum import (
+from witness_demo_fixture import (
     PINNED, PUBLIC_A, PUBLIC_B, WITNESS_A, WITNESS_B, fixture,
+    ATTACKER_PRIVATE, ATTACKER_PUBLIC, PUBLIC, RECEIPT_KEY,
+    INGRESS_KEY, WATCH_KEY, policy,
 )
-from tests.test_public_grade_ledger import ATTACKER_PRIVATE, ATTACKER_PUBLIC, PUBLIC
-from tests.test_receipt_cohort_ledger import RECEIPT_KEY
-from tests.test_watch_outcome_ledger import INGRESS_KEY, WATCH_KEY, policy
 
 
 def run_demo():
-    issued, _, ingress, first, _, held, decision = fixture()
+    issued, ingress, first, held, decision = fixture()
     expected = public_key_fingerprint(PUBLIC)
     with tempfile.TemporaryDirectory(prefix="aru-witness-demo-") as directory:
         root = Path(directory)
