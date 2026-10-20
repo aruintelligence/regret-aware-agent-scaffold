@@ -41,7 +41,7 @@ The challenge authenticates the receipt, authenticates the current closed checkp
 
 The test suite issues a receipt for each of 120 synthetic sequence positions, independently signs a valid manifest with that position rewritten, and detects **120/120** such conflicts. It also tests truncation, stale checkpoints, malformed receipts, key reuse and the CLI statuses. These are software falsification cases, **not** 120 customer requests or a statistical performance estimate. The earlier [120-call real-model cohort](PROSPECTIVE_LEDGER_RESULTS.md) had no customer-held receipts at issuance; this feature does not retroactively authenticate that run.
 
-The [frozen follow-on protocol](RECEIPT_CHALLENGE_PROTOCOL.md) adds CI-prepared receipt claims to the next real-model run. The original audit protocol and its recorded hash remain intact. CI preparation still does not deliver a receipt to an independently controlled customer.
+The [frozen follow-on protocol](RECEIPT_CHALLENGE_PROTOCOL.md) added CI-prepared receipt claims before another real-model run. The [measured results and exact evidence](RECEIPT_CHALLENGE_RESULTS.md) account for 120/120 claims, model calls and grades. The original audit protocol and its recorded hash remain intact. CI preparation did not deliver a receipt to an independently controlled customer.
 
 ## Limits and deployment requirements
 
