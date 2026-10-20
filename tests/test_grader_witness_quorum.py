@@ -7,7 +7,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from grader_witness_quorum import (
     GENESIS, gate_with_witnessed_public_grades, initialize_witness_state,
-    make_witness_statement, sign_witness_statement, statement_fingerprint,
+    make_witness_statement, review_and_sign_witness_statement,
+    sign_witness_statement, statement_fingerprint,
     verify_witness_quorum,
 )
 from grounding_contract import ground_answer
@@ -73,6 +74,72 @@ def fixture():
 
 
 class WitnessQuorumTests(unittest.TestCase):
+    def test_reviewed_signing_checks_exact_logs_policy_and_witness_history(self):
+        issued, grades, ingress, statement, _, held, decision = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            state_a = Path(directory) / "review-a.sqlite3"
+            state_b = Path(directory) / "review-b.sqlite3"
+            initialize_witness_state(state_a)
+            initialize_witness_state(state_b)
+            evidence = {
+                "grader_public_key": held["grader_public_key"],
+                "attestations": held["attestations"],
+                "grade_checkpoint": held["grade_checkpoint"],
+                "receipts": held["receipts"],
+                "receipt_checkpoint": held["receipt_checkpoint"],
+                "issued_rows": issued,
+                "ingress_checkpoint": ingress,
+                "watch_report": decision["watch_report"],
+                "receipt_key": RECEIPT_KEY,
+                "ingress_key": INGRESS_KEY,
+                "watch_key": WATCH_KEY,
+            }
+            signer = {
+                "witness_id": "review-a", "witness_private_key": WITNESS_A,
+                "witness_state_path": state_a,
+                "authorized_grader_public_key_sha256": public_key_fingerprint(PUBLIC),
+            }
+            bad_cases = [
+                ({"authorized_grader_public_key_sha256":
+                    public_key_fingerprint(ATTACKER_PUBLIC)}, evidence),
+                ({}, {**evidence, "attestations": evidence["attestations"][:-1]}),
+                ({}, {**evidence, "receipts": evidence["receipts"][:-1]}),
+                ({}, {**evidence, "watch_report":
+                    {**evidence["watch_report"], "ordered_outcomes_sha256": "f" * 64}}),
+                ({}, {**evidence, "receipt_key": INGRESS_KEY}),
+                ({}, {**evidence, "grader_public_key": ATTACKER_PUBLIC}),
+            ]
+            for signer_change, evidence_change in bad_cases:
+                with self.subTest(signer_change=signer_change,
+                                  evidence_change=list(evidence_change.keys())):
+                    with self.assertRaises((ValueError, TypeError, KeyError)):
+                        review_and_sign_witness_statement(
+                            statement, **{**signer, **signer_change}, **evidence_change)
+            changed = {**statement, "grade_checkpoint_sha256": "f" * 64}
+            with self.assertRaises(ValueError):
+                review_and_sign_witness_statement(changed, **signer, **evidence)
+            first = review_and_sign_witness_statement(statement, **signer, **evidence)
+            second = review_and_sign_witness_statement(
+                statement, witness_id="review-b", witness_private_key=WITNESS_B,
+                witness_state_path=state_b,
+                authorized_grader_public_key_sha256=public_key_fingerprint(PUBLIC),
+                **evidence)
+            self.assertEqual(verify_witness_quorum(
+                statement, [first, second], trusted_witness_public_keys=PINNED
+            )["witness_count"], 2)
+            successor = make_witness_statement(
+                **{**{key: value for key, value in statement.items()
+                      if key not in ("kind", "schema_version")},
+                   "witness_epoch": 2,
+                   "previous_statement_sha256": statement_fingerprint(statement)})
+            review_and_sign_witness_statement(successor, **signer, **evidence)
+            with self.assertRaisesRegex(ValueError, "stale"):
+                review_and_sign_witness_statement(statement, **signer, **evidence)
+            with self.assertRaisesRegex(ValueError, "forked"):
+                review_and_sign_witness_statement(
+                    {**successor, "previous_statement_sha256": "f" * 64},
+                    **signer, **evidence)
+
     def test_two_pinned_witnesses_accept_and_one_or_mixed_signature_fails(self):
         issued, grades, ingress, statement, approvals, held, decision = fixture()
         verified = verify_witness_quorum(

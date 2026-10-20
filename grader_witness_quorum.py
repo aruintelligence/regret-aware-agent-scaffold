@@ -13,11 +13,13 @@ import stat
 from pathlib import Path
 
 from anytime_risk_watch import _id
+from grade_attestation_ledger import _plain_grades
 from public_grade_ledger import (
-    _public_key, _sign, _verify, gate_with_public_grades,
-    public_key_fingerprint,
+    _public_key, _sign, _verify, audit_public_grades,
+    gate_with_public_grades, public_checkpoint_fingerprint, public_key_fingerprint,
 )
-from watch_outcome_ledger import _digest, _hex
+from receipt_cohort_ledger import reconcile_receipt_cohort
+from watch_outcome_ledger import _digest, _hex, verify_complete_report
 
 GENESIS = "0" * 64
 _DOMAIN = b"aru-grader-witness-v1\0"
@@ -82,7 +84,7 @@ def statement_fingerprint(statement):
 
 
 def sign_witness_statement(statement, *, witness_id, witness_private_key):
-    """Sign a reviewed statement; witness operators must verify inputs first."""
+    """Low-level signature only; does not review the underlying evidence."""
     statement_sha256 = statement_fingerprint(statement)
     _id(witness_id, "witness_id")
     public_key = _public_key(witness_private_key)
@@ -94,6 +96,72 @@ def sign_witness_statement(statement, *, witness_id, witness_private_key):
     }
     return {**unsigned, "witness_signature_ed25519":
             _sign(unsigned, witness_private_key, _DOMAIN)}
+
+
+def review_and_sign_witness_statement(
+        statement, *, witness_id, witness_private_key, witness_state_path,
+        authorized_grader_public_key_sha256, grader_public_key,
+        attestations, grade_checkpoint, receipts, receipt_checkpoint,
+        issued_rows, ingress_checkpoint, watch_report,
+        receipt_key, ingress_key, watch_key):
+    """Review exact closed records against a witness-held grader pin before signing.
+
+    The witness owns the authorized pin, HMAC keys and private state path;
+    none should be accepted from a release request. This checks consistency,
+    not whether the grading judgments or witness operator are honest.
+    """
+    _validate_statement(statement)
+    if (not _hex(authorized_grader_public_key_sha256)
+            or not hmac.compare_digest(
+                authorized_grader_public_key_sha256,
+                statement["grader_public_key_sha256"])):
+        raise ValueError("grader is not authorized by witness policy")
+    if _public_key(witness_private_key) == grader_public_key:
+        raise ValueError("grader key reused as witness")
+    if (not isinstance(watch_report, dict)
+            or receipt_key == ingress_key or receipt_key == watch_key
+            or ingress_key == watch_key
+            or grader_public_key in (receipt_key, ingress_key, watch_key)):
+        raise ValueError("missing report or signing-key role separation")
+    for field in ("cohort_id", "model_revision", "rubric_id"):
+        if any(checkpoint[field] != statement[field] for checkpoint in (
+                grade_checkpoint, receipt_checkpoint, ingress_checkpoint)):
+            raise ValueError("witness statement scope differs from checkpoints")
+    if (not hmac.compare_digest(public_checkpoint_fingerprint(grade_checkpoint),
+                                statement["grade_checkpoint_sha256"])
+            or not hmac.compare_digest(ingress_checkpoint["ingress_hmac_sha256"],
+                                       statement["ingress_hmac_sha256"])
+            or not hmac.compare_digest(receipt_checkpoint["receipt_ledger_hmac_sha256"],
+                                       statement["receipt_hmac_sha256"])
+            or not hmac.compare_digest(watch_report["ordered_outcomes_sha256"],
+                                       statement["ordered_outcomes_sha256"])):
+        raise ValueError("witness statement differs from supplied records")
+    grade_audit = audit_public_grades(
+        attestations, issued_rows, grade_checkpoint=grade_checkpoint,
+        ingress_checkpoint=ingress_checkpoint, grader_public_key=grader_public_key,
+        expected_grader_public_key_sha256=authorized_grader_public_key_sha256,
+        expected_current_grade_checkpoint_sha256=statement["grade_checkpoint_sha256"],
+        ingress_key=ingress_key,
+        expected_current_ingress_hmac_sha256=statement["ingress_hmac_sha256"],
+    )
+    receipt_audit = reconcile_receipt_cohort(
+        receipts, issued_rows, receipt_checkpoint=receipt_checkpoint,
+        ingress_checkpoint=ingress_checkpoint, receipt_key=receipt_key,
+        ingress_key=ingress_key,
+        expected_current_receipt_hmac_sha256=statement["receipt_hmac_sha256"],
+        expected_current_ingress_hmac_sha256=statement["ingress_hmac_sha256"],
+    )
+    if (grade_audit["status"] != "complete"
+            or receipt_audit["status"] != "complete"
+            or not verify_complete_report(
+                watch_report, issued_rows, _plain_grades(attestations),
+                checkpoint=ingress_checkpoint, ingress_key=ingress_key,
+                watch_key=watch_key)):
+        raise ValueError("incomplete or inconsistent witness evidence")
+    approval = sign_witness_statement(
+        statement, witness_id=witness_id, witness_private_key=witness_private_key)
+    record_witness_head(witness_state_path, statement)
+    return approval
 
 
 def verify_witness_quorum(statement, approvals, *, trusted_witness_public_keys,
