@@ -210,6 +210,37 @@ jobs:
           assert audit(changed)["conflict_sequences"] == [18]
           print("Synthetic independent receipt log exposed a validly signed ingress rewrite.")
           PY
+      - name: Deny watch labels that disagree with independent signed grades
+        run: |
+          python - <<'PY'
+          from grade_attestation_ledger import attest_grade, create_grade_checkpoint, audit_grade_cohort
+          from watch_outcome_ledger import create_issued_checkpoint, reconcile_issued_grades, verify_complete_report
+          ingress = b"synthetic-ingress-key-32-independent"
+          grader = b"synthetic-grader-key-32-independent"
+          monitor = b"synthetic-watch-key-32-independent"
+          issued = [dict(sequence=i, request_id=f"test-{i}", group="general",
+                         model_revision="fixed", rubric_id="v1") for i in range(1, 31)]
+          grades = [dict(request_id=f"test-{i}", error=False, rubric_id="v1",
+                         grader_id="fixture") for i in range(1, 31)]
+          anchor = create_issued_checkpoint(issued, cohort_id="ci-demo", groups=["general"],
+              model_revision="fixed", rubric_id="v1", ingress_key=ingress)
+          signed = [attest_grade(g, grade_sequence=i, cohort_id="ci-demo",
+              model_revision="fixed", grader_key=grader) for i, g in enumerate(grades, 1)]
+          checkpoint = create_grade_checkpoint(signed, cohort_id="ci-demo",
+              model_revision="fixed", rubric_id="v1", grader_key=grader)
+          result = audit_grade_cohort(signed, issued, grade_checkpoint=checkpoint,
+              ingress_checkpoint=anchor, grader_key=grader, ingress_key=ingress,
+              expected_current_grade_hmac_sha256=checkpoint["grader_ledger_hmac_sha256"],
+              expected_current_ingress_hmac_sha256=anchor["ingress_hmac_sha256"])
+          assert result["status"] == "complete"
+          changed = [*grades]
+          changed[17] = {**grades[17], "error": True}
+          forged_watch = reconcile_issued_grades(issued, changed, checkpoint=anchor,
+              ingress_key=ingress, watch_key=monitor)["report"]
+          assert not verify_complete_report(forged_watch, issued, grades, checkpoint=anchor,
+              ingress_key=ingress, watch_key=monitor)
+          print("Synthetic signed grader log rejected a re-signed monitoring label.")
+          PY
       - name: Verify original scaffold benchmark
         run: python benchmark.py --runs 3 > /dev/null
       - name: Generate labeled synthetic evidence and HTML report

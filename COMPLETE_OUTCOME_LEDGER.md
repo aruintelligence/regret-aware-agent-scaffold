@@ -6,6 +6,8 @@ An alarm-free watch can be misleading if difficult requests disappear before gra
 
 For a requester who holds evidence of their own issuance, [customer-held request receipts](CLIENT_RECEIPT_CHALLENGE.md) add a third, separately keyed claim and an explicit challenge against the current signed manifest. This can reveal a request the ingress operator omitted or rewrote **before** closing the cohort, subject to the issuer and delivery assumptions described there.
 
+For an actual separately operated grader, [grade attestations](INDEPENDENT_GRADE_LEDGER.md) replace self-asserted `grader_id` metadata with individually signed binary labels and an independently current closed grader checkpoint. The stricter gate requires exact watch recomputation from those labels.
+
 ## Two sources, one ordered stream
 
 Record issuance at the trusted request boundary, before knowing the outcome. A manifest row has exactly these five fields; `sequence` starts at 1 with no gaps. Keep raw prompts and answers outside this log.

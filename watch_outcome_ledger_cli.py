@@ -7,6 +7,9 @@ import os
 from pathlib import Path
 
 from client_request_receipt import challenge_request_receipt, issue_request_receipt
+from grade_attestation_ledger import (
+    _plain_grades, attest_grade, audit_grade_cohort, create_grade_checkpoint,
+)
 from receipt_cohort_ledger import create_receipt_checkpoint, reconcile_receipt_cohort
 from watch_outcome_ledger import (
     create_issued_checkpoint, reconcile_issued_grades, verify_complete_report,
@@ -72,6 +75,26 @@ def main():
     receipt_audit.add_argument("--ingress-checkpoint", required=True)
     receipt_audit.add_argument("--expected-receipt-hmac", required=True)
     receipt_audit.add_argument("--expected-checkpoint-hmac", required=True)
+    grade = sub.add_parser("grade", help="Sign one independent binary grade")
+    grade.add_argument("--grade-json", required=True)
+    grade.add_argument("--grade-sequence", type=int, required=True)
+    grade.add_argument("--cohort-id", required=True)
+    grade.add_argument("--model-revision", required=True)
+    grade.add_argument("--out", required=True)
+    grade_anchor = sub.add_parser("grade-anchor", help="Close the independent graded log")
+    grade_anchor.add_argument("--attestations-jsonl", required=True)
+    grade_anchor.add_argument("--cohort-id", required=True)
+    grade_anchor.add_argument("--model-revision", required=True)
+    grade_anchor.add_argument("--rubric-id", required=True)
+    grade_anchor.add_argument("--out", required=True)
+    grade_reconcile = sub.add_parser("grade-reconcile", help="Sign a watch only from authenticated complete grades")
+    grade_reconcile.add_argument("--attestations-jsonl", required=True)
+    grade_reconcile.add_argument("--issued-jsonl", required=True)
+    grade_reconcile.add_argument("--grade-checkpoint", required=True)
+    grade_reconcile.add_argument("--ingress-checkpoint", required=True)
+    grade_reconcile.add_argument("--expected-grade-hmac", required=True)
+    grade_reconcile.add_argument("--expected-checkpoint-hmac", required=True)
+    grade_reconcile.add_argument("--out", required=True)
     anchor = sub.add_parser("anchor", help="Sign the closed issued cohort with the ingress key")
     anchor.add_argument("--issued-jsonl", required=True)
     anchor.add_argument("--cohort-id", required=True)
@@ -114,7 +137,61 @@ def main():
                               "receipt_count": checkpoint["receipt_count"],
                               "receipt_ledger_hmac_sha256": checkpoint["receipt_ledger_hmac_sha256"]}))
             return
+        if args.command == "grade":
+            grade = attest_grade(
+                _object(args.grade_json), grade_sequence=args.grade_sequence,
+                cohort_id=args.cohort_id, model_revision=args.model_revision,
+                grader_key=_key("ARU_GRADER_SIGNING_KEY"),
+            )
+            _exclusive_json(args.out, grade)
+            print(json.dumps({"attestation": args.out, "grade_sequence": grade["grade_sequence"]}))
+            return
+        if args.command == "grade-anchor":
+            checkpoint = create_grade_checkpoint(
+                _rows(args.attestations_jsonl), cohort_id=args.cohort_id,
+                model_revision=args.model_revision, rubric_id=args.rubric_id,
+                grader_key=_key("ARU_GRADER_SIGNING_KEY"),
+            )
+            _exclusive_json(args.out, checkpoint)
+            print(json.dumps({"checkpoint": args.out, "grade_count": checkpoint["grade_count"],
+                              "grader_ledger_hmac_sha256": checkpoint["grader_ledger_hmac_sha256"]}))
+            return
         ingress_key = _key("ARU_ISSUED_SIGNING_KEY")
+        if args.command == "grade-reconcile":
+            attested = _rows(args.attestations_jsonl)
+            issued = _rows(args.issued_jsonl)
+            ingress_checkpoint = _object(args.ingress_checkpoint)
+            grade_checkpoint = _object(args.grade_checkpoint)
+            grader_key = _key("ARU_GRADER_SIGNING_KEY")
+            watch_key = _key("ARU_WATCH_SIGNING_KEY")
+            if grader_key == watch_key:
+                raise ValueError("grader and watch keys must be independent")
+            audited = audit_grade_cohort(
+                attested, issued, grade_checkpoint=grade_checkpoint,
+                ingress_checkpoint=ingress_checkpoint, grader_key=grader_key,
+                ingress_key=ingress_key,
+                expected_current_grade_hmac_sha256=args.expected_grade_hmac,
+                expected_current_ingress_hmac_sha256=args.expected_checkpoint_hmac,
+            )
+            if audited["status"] != "complete":
+                print(json.dumps(audited, sort_keys=True))
+                raise SystemExit(3)
+            result = reconcile_issued_grades(
+                issued, _plain_grades(attested), checkpoint=ingress_checkpoint,
+                ingress_key=ingress_key, watch_key=watch_key,
+            )
+            if result["status"] != "complete":
+                print(json.dumps(result, sort_keys=True))
+                raise SystemExit(3)
+            report = result["report"]
+            _exclusive_json(args.out, report)
+            print(json.dumps({"report": args.out, "status": "complete",
+                              "graded_count": report["graded_count"],
+                              "degradation_alarm": report["degradation_alarm"],
+                              "automatic_rollout_permitted": False}))
+            if report["degradation_alarm"]:
+                raise SystemExit(10)
+            return
         if args.command == "receipt-audit":
             result = reconcile_receipt_cohort(
                 _rows(args.receipts_jsonl), _rows(args.issued_jsonl),
