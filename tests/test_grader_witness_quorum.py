@@ -1,6 +1,7 @@
 """Falsify self-fed grader pins, single-witness claims and checkpoint rollback."""
 import tempfile
 import unittest
+import os
 from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -76,6 +77,42 @@ def fixture():
 
 
 class WitnessQuorumTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix", "POSIX directory permission test")
+    def test_state_requires_owner_private_parent_at_creation_and_use(self):
+        _, _, _, statement, approvals, held, decision = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            private_dir = Path(directory) / "host-state"
+            private_dir.mkdir(mode=0o700)
+            state = private_dir / "head.sqlite3"
+            initialize_witness_state(state, trusted_witness_public_keys=PINNED)
+            parameters = {
+                "statement": statement, "witness_approvals": approvals,
+                "trusted_witness_public_keys": PINNED,
+                "witness_state_path": state, **held, **decision,
+            }
+            self.assertTrue(gate_with_witnessed_public_grades(
+                policy(), **parameters)["accepted"])
+            private_dir.chmod(0o777)
+            try:
+                with self.assertRaisesRegex(ValueError, "owner-private"):
+                    record_witness_head(state, statement)
+                with self.assertRaisesRegex(ValueError, "owner-private"):
+                    initialize_witness_state(
+                        private_dir / "new.sqlite3",
+                        trusted_witness_public_keys=PINNED)
+                self.assertFalse((private_dir / "new.sqlite3").exists())
+                self.assertEqual(gate_with_witnessed_public_grades(
+                    policy(), **parameters)["reason"],
+                    "invalid_or_stale_witness_quorum")
+            finally:
+                private_dir.chmod(0o700)
+            self.assertTrue(gate_with_witnessed_public_grades(
+                policy(), **parameters)["accepted"])
+            alias = Path(directory) / "alias"
+            alias.symlink_to(private_dir, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "private witness-state directory"):
+                record_witness_head(alias / "head.sqlite3", statement)
+
     def test_verifier_rejects_self_fed_witness_map_and_unpinned_state(self):
         _, _, _, statement, approvals, held, decision = fixture()
         substituted_map = {"review-a": ATTACKER_PUBLIC, "review-b": PUBLIC_B}

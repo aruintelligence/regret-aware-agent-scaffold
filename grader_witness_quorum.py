@@ -254,6 +254,7 @@ def _signer_policy_digest(witness_id, witness_public_key):
 
 def _private_state_target(state_path):
     target = Path(state_path)
+    _private_state_parent(target)
     if str(target) == ":memory:" or target.is_symlink() or not target.is_file():
         raise ValueError("initialized on-disk witness state required")
     info = target.stat()
@@ -262,6 +263,18 @@ def _private_state_target(state_path):
                 (info.st_mode & 0o077) != 0 or info.st_uid != os.getuid()))):
         raise ValueError("witness state must be private to the verifier")
     return target
+
+
+def _private_state_parent(target):
+    """Protect the name and SQLite journal files from directory replacement."""
+    parent = target.parent
+    if parent.is_symlink() or not parent.is_dir():
+        raise ValueError("private witness-state directory required")
+    info = parent.stat()
+    if (not stat.S_ISDIR(info.st_mode)
+            or (os.name == "posix" and (
+                (info.st_mode & 0o077) != 0 or info.st_uid != os.getuid()))):
+        raise ValueError("witness-state directory must be owner-private")
 
 
 def _verify_pinned_witness_policy(state_path, trusted_witness_public_keys):
@@ -342,8 +355,9 @@ def initialize_witness_state(state_path, *, trusted_witness_public_keys=None,
     signer_digest = (_signer_policy_digest(witness_id, witness_public_key)
                      if witness_id is not None else None)
     target = Path(state_path)
-    if str(target) == ":memory:" or not target.parent.is_dir():
+    if str(target) == ":memory:":
         raise ValueError("persistent witness-state directory required")
+    _private_state_parent(target)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(target, flags, 0o600)
     os.close(descriptor)
