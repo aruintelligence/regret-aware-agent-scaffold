@@ -7,7 +7,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from grader_witness_quorum import (
     GENESIS, gate_with_witnessed_public_grades, initialize_witness_state,
-    make_witness_statement, pin_existing_witness_state,
+    make_witness_statement, pin_existing_signer_state,
+    pin_existing_witness_state,
     record_witness_head, review_and_sign_witness_statement,
     sign_witness_statement, statement_fingerprint,
     verify_witness_quorum,
@@ -148,8 +149,10 @@ class WitnessQuorumTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             state_a = Path(directory) / "review-a.sqlite3"
             state_b = Path(directory) / "review-b.sqlite3"
-            initialize_witness_state(state_a)
-            initialize_witness_state(state_b)
+            initialize_witness_state(state_a, witness_id="review-a",
+                                     witness_public_key=PUBLIC_A)
+            initialize_witness_state(state_b, witness_id="review-b",
+                                     witness_public_key=PUBLIC_B)
             evidence = {
                 "grader_public_key": held["grader_public_key"],
                 "attestations": held["attestations"],
@@ -168,6 +171,35 @@ class WitnessQuorumTests(unittest.TestCase):
                 "witness_state_path": state_a,
                 "authorized_grader_public_key_sha256": public_key_fingerprint(PUBLIC),
             }
+            with self.assertRaisesRegex(ValueError, "identity differs"):
+                review_and_sign_witness_statement(
+                    statement, **{**signer, "witness_id": "review-b"}, **evidence)
+            with self.assertRaisesRegex(ValueError, "identity differs"):
+                review_and_sign_witness_statement(
+                    statement, **{**signer,
+                                  "witness_private_key": WITNESS_B}, **evidence)
+            with self.assertRaisesRegex(ValueError, "identity differs"):
+                review_and_sign_witness_statement(
+                    statement, **{**signer, "witness_state_path": state_b}, **evidence)
+            unpinned_signer = Path(directory) / "old-signer.sqlite3"
+            initialize_witness_state(unpinned_signer)
+            with self.assertRaisesRegex(ValueError, "pinned witness signer"):
+                review_and_sign_witness_statement(
+                    statement, **{**signer,
+                                  "witness_state_path": unpinned_signer}, **evidence)
+            record_witness_head(unpinned_signer, statement)
+            pin_existing_signer_state(
+                unpinned_signer, witness_id="review-a", witness_public_key=PUBLIC_A)
+            self.assertEqual(review_and_sign_witness_statement(
+                statement, **{**signer, "witness_state_path": unpinned_signer},
+                **evidence)["witness_id"], "review-a")
+            with self.assertRaisesRegex(ValueError, "already pinned"):
+                pin_existing_signer_state(
+                    unpinned_signer, witness_id="review-b",
+                    witness_public_key=PUBLIC_B)
+            with self.assertRaisesRegex(ValueError, "separate state"):
+                pin_existing_witness_state(
+                    unpinned_signer, trusted_witness_public_keys=PINNED)
             bad_cases = [
                 ({"authorized_grader_public_key_sha256":
                     public_key_fingerprint(ATTACKER_PUBLIC)}, evidence),

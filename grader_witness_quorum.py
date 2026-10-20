@@ -166,6 +166,7 @@ def review_and_sign_witness_statement(
     """
     if _public_key(witness_private_key) == grader_public_key:
         raise ValueError("grader key reused as witness")
+    _verify_signer_state(witness_state_path, witness_id, witness_private_key)
     _review_witness_records(
         statement, authorized_grader_public_key_sha256=
         authorized_grader_public_key_sha256,
@@ -243,6 +244,14 @@ def _witness_policy_digest(trusted_witness_public_keys):
     return _digest(fingerprints)
 
 
+def _signer_policy_digest(witness_id, witness_public_key):
+    _id(witness_id, "witness_id")
+    return _digest({"kind": "aru_witness_signer_identity",
+                    "witness_id": witness_id,
+                    "witness_public_key_sha256":
+                        public_key_fingerprint(witness_public_key)})
+
+
 def _private_state_target(state_path):
     target = Path(state_path)
     if str(target) == ":memory:" or target.is_symlink() or not target.is_file():
@@ -265,6 +274,20 @@ def _verify_pinned_witness_policy(state_path, trusted_witness_public_keys):
         ).fetchone()
     if row is None or not hmac.compare_digest(row[0], digest):
         raise ValueError("caller witness map differs from pinned verifier policy")
+
+
+def _verify_signer_state(state_path, witness_id, witness_private_key):
+    digest = _signer_policy_digest(witness_id, _public_key(witness_private_key))
+    target = _private_state_target(state_path)
+    try:
+        with sqlite3.connect(str(target), timeout=10) as db:
+            row = db.execute(
+                "SELECT policy_sha256 FROM witness_signer_policy WHERE id=1"
+            ).fetchone()
+    except sqlite3.Error as exc:
+        raise ValueError("pinned witness signer state required") from exc
+    if row is None or not hmac.compare_digest(row[0], digest):
+        raise ValueError("witness signing identity differs from private state")
 
 
 def record_witness_head(state_path, statement):
@@ -306,10 +329,18 @@ def record_witness_head(state_path, statement):
             "statement_sha256": digest, "automatic_rollout_permitted": False}
 
 
-def initialize_witness_state(state_path, *, trusted_witness_public_keys=None):
-    """Create private state; release verifiers must pin their witness map."""
+def initialize_witness_state(state_path, *, trusted_witness_public_keys=None,
+                             witness_id=None, witness_public_key=None):
+    """Create private state pinned for a verifier or an individual signer."""
+    if (trusted_witness_public_keys is not None
+            and (witness_id is not None or witness_public_key is not None)):
+        raise ValueError("verifier and signer identities need separate state")
+    if (witness_id is None) != (witness_public_key is None):
+        raise ValueError("witness signer ID and public key required together")
     policy_digest = (_witness_policy_digest(trusted_witness_public_keys)
                      if trusted_witness_public_keys is not None else None)
+    signer_digest = (_signer_policy_digest(witness_id, witness_public_key)
+                     if witness_id is not None else None)
     target = Path(state_path)
     if str(target) == ":memory:" or not target.parent.is_dir():
         raise ValueError("persistent witness-state directory required")
@@ -328,6 +359,13 @@ def initialize_witness_state(state_path, *, trusted_witness_public_keys=None):
                 "policy_sha256 TEXT NOT NULL)"
             )
             db.execute("INSERT INTO witness_policy VALUES (1,?)", (policy_digest,))
+        if signer_digest is not None:
+            db.execute(
+                "CREATE TABLE witness_signer_policy ("
+                "id INTEGER PRIMARY KEY CHECK(id=1), policy_sha256 TEXT NOT NULL)"
+            )
+            db.execute("INSERT INTO witness_signer_policy VALUES (1,?)",
+                       (signer_digest,))
         db.commit()
     return str(target)
 
@@ -339,21 +377,39 @@ def pin_existing_witness_state(state_path, *, trusted_witness_public_keys):
     and key map before calling; it cannot recover history lost before pinning.
     """
     digest = _witness_policy_digest(trusted_witness_public_keys)
+    return _pin_existing_policy(state_path, digest, "witness_policy")
+
+
+def pin_existing_signer_state(state_path, *, witness_id, witness_public_key):
+    """Bind an existing witness head to its verified individual identity."""
+    digest = _signer_policy_digest(witness_id, witness_public_key)
+    return _pin_existing_policy(state_path, digest, "witness_signer_policy")
+
+
+def _pin_existing_policy(state_path, digest, table):
+    # Table name is an internal constant from the two entry points above.
     target = _private_state_target(state_path)
     with sqlite3.connect(str(target), timeout=10) as db:
         db.execute("PRAGMA synchronous=FULL")
         db.execute("BEGIN IMMEDIATE")
         # Require an initialized state with its existing history intact.
         db.execute("SELECT cohort_id FROM witness_heads LIMIT 1").fetchone()
+        opposite = ("witness_signer_policy" if table == "witness_policy"
+                    else "witness_policy")
+        if db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (opposite,),
+        ).fetchone():
+            raise ValueError("verifier and signer identities need separate state")
         db.execute(
-            "CREATE TABLE IF NOT EXISTS witness_policy ("
+            f"CREATE TABLE IF NOT EXISTS {table} ("
             "id INTEGER PRIMARY KEY CHECK(id=1), policy_sha256 TEXT NOT NULL)"
         )
         current = db.execute(
-            "SELECT policy_sha256 FROM witness_policy WHERE id=1"
+            f"SELECT policy_sha256 FROM {table} WHERE id=1"
         ).fetchone()
         if current is None:
-            db.execute("INSERT INTO witness_policy VALUES (1,?)", (digest,))
+            db.execute(f"INSERT INTO {table} VALUES (1,?)", (digest,))
         elif not hmac.compare_digest(current[0], digest):
             raise ValueError("witness policy already pinned to different keys")
         db.commit()
