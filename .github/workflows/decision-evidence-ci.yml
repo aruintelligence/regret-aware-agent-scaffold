@@ -220,7 +220,7 @@ jobs:
           monitor = b"synthetic-watch-key-32-independent"
           issued = [dict(sequence=i, request_id=f"test-{i}", group="general",
                          model_revision="fixed", rubric_id="v1") for i in range(1, 31)]
-          grades = [dict(request_id=f"test-{i}", error=False, rubric_id="v1",
+          grades = [dict(request_id=f"test-{i}", error=i == 18, rubric_id="v1",
                          grader_id="fixture") for i in range(1, 31)]
           anchor = create_issued_checkpoint(issued, cohort_id="ci-demo", groups=["general"],
               model_revision="fixed", rubric_id="v1", ingress_key=ingress)
@@ -234,7 +234,7 @@ jobs:
               expected_current_ingress_hmac_sha256=anchor["ingress_hmac_sha256"])
           assert result["status"] == "complete"
           changed = [*grades]
-          changed[17] = {**grades[17], "error": True}
+          changed[17] = {**grades[17], "error": False}
           forged_watch = reconcile_issued_grades(issued, changed, checkpoint=anchor,
               ingress_key=ingress, watch_key=monitor)["report"]
           assert not verify_complete_report(forged_watch, issued, grades, checkpoint=anchor,

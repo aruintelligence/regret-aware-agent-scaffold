@@ -153,6 +153,38 @@ class GradeAttestationLedgerTests(unittest.TestCase):
                 self.assertEqual(denial["reason"],
                                  "signed_watch_disagrees_with_authenticated_grades")
                 self.assertFalse(denial["automatic_rollout_permitted"])
+        # More dangerous direction: hide the one real error. Test every
+        # position because the watch processes the stream in issuance order.
+        for index in range(40):
+            with self.subTest(hidden_error=index):
+                observed = [*grades]
+                observed[index] = {**grades[index], "error": True}
+                observed_attestations = [
+                    attest_grade(grade, grade_sequence=sequence,
+                                 cohort_id=ingress["cohort_id"],
+                                 model_revision=ingress["model_revision"],
+                                 grader_key=GRADER_KEY)
+                    for sequence, grade in enumerate(reversed(observed), 1)
+                ]
+                observed_checkpoint = create_grade_checkpoint(
+                    observed_attestations, cohort_id=ingress["cohort_id"],
+                    model_revision=ingress["model_revision"],
+                    rubric_id=ingress["rubric_id"], grader_key=GRADER_KEY,
+                )
+                observed_grader = {
+                    **graded, "attestations": observed_attestations,
+                    "grade_checkpoint": observed_checkpoint,
+                    "expected_current_grade_hmac_sha256": observed_checkpoint[
+                        "grader_ledger_hmac_sha256"],
+                }
+                self.assertTrue(gate_with_authenticated_grades(
+                    static, **observed_grader, **held, **kwargs(observed))["accepted"])
+                self.assertTrue(gate_with_receipt_ledger(
+                    static, **held, **kwargs(grades))["accepted"])
+                hidden = gate_with_authenticated_grades(
+                    static, **observed_grader, **held, **kwargs(grades))
+                self.assertEqual(hidden["reason"],
+                                 "signed_watch_disagrees_with_authenticated_grades")
         stale = gate_with_authenticated_grades(
             static, **{**graded, "expected_current_grade_hmac_sha256": "0" * 64},
             **held, **kwargs(grades))
