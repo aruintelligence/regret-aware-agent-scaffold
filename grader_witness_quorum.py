@@ -98,26 +98,18 @@ def sign_witness_statement(statement, *, witness_id, witness_private_key):
             _sign(unsigned, witness_private_key, _DOMAIN)}
 
 
-def review_and_sign_witness_statement(
-        statement, *, witness_id, witness_private_key, witness_state_path,
-        authorized_grader_public_key_sha256, grader_public_key,
+def _review_witness_records(
+        statement, *, authorized_grader_public_key_sha256, grader_public_key,
         attestations, grade_checkpoint, receipts, receipt_checkpoint,
         issued_rows, ingress_checkpoint, watch_report,
         receipt_key, ingress_key, watch_key):
-    """Review exact closed records against a witness-held grader pin before signing.
-
-    The witness owns the authorized pin, HMAC keys and private state path;
-    none should be accepted from a release request. This checks consistency,
-    not whether the grading judgments or witness operator are honest.
-    """
+    """Require a complete, consistent closed cohort bound to this statement."""
     _validate_statement(statement)
     if (not _hex(authorized_grader_public_key_sha256)
             or not hmac.compare_digest(
                 authorized_grader_public_key_sha256,
                 statement["grader_public_key_sha256"])):
         raise ValueError("grader is not authorized by witness policy")
-    if _public_key(witness_private_key) == grader_public_key:
-        raise ValueError("grader key reused as witness")
     if (not isinstance(watch_report, dict)
             or receipt_key == ingress_key or receipt_key == watch_key
             or ingress_key == watch_key
@@ -158,6 +150,31 @@ def review_and_sign_witness_statement(
                 checkpoint=ingress_checkpoint, ingress_key=ingress_key,
                 watch_key=watch_key)):
         raise ValueError("incomplete or inconsistent witness evidence")
+
+
+def review_and_sign_witness_statement(
+        statement, *, witness_id, witness_private_key, witness_state_path,
+        authorized_grader_public_key_sha256, grader_public_key,
+        attestations, grade_checkpoint, receipts, receipt_checkpoint,
+        issued_rows, ingress_checkpoint, watch_report,
+        receipt_key, ingress_key, watch_key):
+    """Review exact closed records against a witness-held grader pin before signing.
+
+    The witness owns the authorized pin, HMAC keys and private state path;
+    none should be accepted from a release request. This checks consistency,
+    not whether the grading judgments or witness operator are honest.
+    """
+    if _public_key(witness_private_key) == grader_public_key:
+        raise ValueError("grader key reused as witness")
+    _review_witness_records(
+        statement, authorized_grader_public_key_sha256=
+        authorized_grader_public_key_sha256,
+        grader_public_key=grader_public_key, attestations=attestations,
+        grade_checkpoint=grade_checkpoint, receipts=receipts,
+        receipt_checkpoint=receipt_checkpoint, issued_rows=issued_rows,
+        ingress_checkpoint=ingress_checkpoint, watch_report=watch_report,
+        receipt_key=receipt_key, ingress_key=ingress_key, watch_key=watch_key,
+    )
     approval = sign_witness_statement(
         statement, witness_id=witness_id, witness_private_key=witness_private_key)
     record_witness_head(witness_state_path, statement)
@@ -322,9 +339,24 @@ def gate_with_witnessed_public_grades(policy, *, statement, witness_approvals,
             expected_current_receipt_hmac_sha256=statement["receipt_hmac_sha256"],
             **gate_options, **derived,
         )
-        # Even a correctly witnessed alarm or failed policy moves the head.
-        # The verifier must own this state path; a caller-controlled path can
-        # erase or substitute history and defeats rollback protection.
+        # A valid signature on invalid or missing records must not poison the
+        # verifier's high-water mark. Policy denials after a complete, verified
+        # cohort still advance it, including a genuine degradation alarm.
+        try:
+            _review_witness_records(
+                statement, authorized_grader_public_key_sha256=
+                statement["grader_public_key_sha256"],
+                grader_public_key=grader_public_key, attestations=attestations,
+                grade_checkpoint=grade_checkpoint, receipts=receipts,
+                receipt_checkpoint=receipt_checkpoint, issued_rows=issued_rows,
+                ingress_checkpoint=ingress, watch_report=gate_options["watch_report"],
+                receipt_key=receipt_key, ingress_key=gate_options["ingress_key"],
+                watch_key=gate_options["watch_key"],
+            )
+        except (KeyError, TypeError, ValueError):
+            return {**deny, "reason": "invalid_or_incomplete_witness_evidence"}
+        # The verifier must own this path; caller-controlled state can erase
+        # or substitute history and defeats rollback protection.
         record_witness_head(witness_state_path, statement)
     except (KeyError, TypeError, ValueError, OSError, sqlite3.Error):
         return {**deny, "reason": "invalid_or_stale_witness_quorum"}

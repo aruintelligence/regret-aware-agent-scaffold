@@ -236,7 +236,59 @@ class WitnessQuorumTests(unittest.TestCase):
                 witness_state_path=state_path,
                 **attacker_held, **forged_decision)
             self.assertFalse(denied["accepted"])
-            self.assertEqual(denied["reason"], "invalid_or_stale_public_grader_ledger")
+            self.assertEqual(denied["reason"], "invalid_or_incomplete_witness_evidence")
+
+    def test_invalid_signed_evidence_cannot_poison_verifier_head(self):
+        issued, grades, ingress, first, approvals, held, decision = fixture()
+        successor = make_witness_statement(
+            **{**{key: value for key, value in first.items()
+                  if key not in ("kind", "schema_version")},
+               "witness_epoch": 2,
+               "previous_statement_sha256": statement_fingerprint(first)})
+
+        def signed(statement):
+            return [
+                sign_witness_statement(statement, witness_id="review-a",
+                                       witness_private_key=WITNESS_A),
+                sign_witness_statement(statement, witness_id="review-b",
+                                       witness_private_key=WITNESS_B),
+            ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "verifier.sqlite3"
+            initialize_witness_state(state)
+
+            def gate(statement, approvals, held_change=None, decision_change=None):
+                return gate_with_witnessed_public_grades(
+                    policy(), statement=statement, witness_approvals=approvals,
+                    trusted_witness_public_keys=PINNED, witness_state_path=state,
+                    **{**held, **(held_change or {})},
+                    **{**decision, **(decision_change or {})})
+
+            self.assertTrue(gate(first, approvals)["accepted"])
+            invalid = [
+                (successor, {"attestations": held["attestations"][:-1]}, None),
+                (successor, {"receipts": held["receipts"][:-1]}, None),
+                (successor, None, {"watch_report":
+                    {**decision["watch_report"], "ordered_outcomes_sha256": "f" * 64}}),
+                ({**successor, "ordered_outcomes_sha256": "f" * 64}, None, None),
+            ]
+            for statement, changed_held, changed_decision in invalid:
+                with self.subTest(changed_held=changed_held is not None,
+                                  changed_decision=changed_decision is not None,
+                                  changed_statement=statement != successor):
+                    denied = gate(statement, signed(statement), changed_held,
+                                  changed_decision)
+                    self.assertFalse(denied["accepted"])
+                    self.assertEqual(denied["reason"],
+                                     "invalid_or_incomplete_witness_evidence")
+            # A complete witnessed cohort can advance the head even if the
+            # release policy denies this specific, unmonitored request.
+            denied = gate(successor, signed(successor),
+                          decision_change={"group": "unmonitored"})
+            self.assertEqual(denied["reason"], "unmonitored_group")
+            self.assertEqual(gate(first, approvals)["reason"],
+                             "invalid_or_stale_witness_quorum")
 
     def test_monotonic_state_rejects_old_epoch_fork_and_skipped_successor(self):
         issued, grades, ingress, first, approvals, held, decision = fixture()
@@ -277,7 +329,7 @@ class WitnessQuorumTests(unittest.TestCase):
                                        witness_private_key=WITNESS_B),
             ]
             self.assertEqual(gate(fork, fork_approvals)["reason"],
-                             "invalid_or_stale_witness_quorum")
+                             "invalid_or_incomplete_witness_evidence")
             skipped = {**second, "witness_epoch": 4}
             skipped_approvals = [
                 sign_witness_statement(skipped, witness_id="review-a",
