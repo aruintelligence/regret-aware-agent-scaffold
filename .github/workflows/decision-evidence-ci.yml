@@ -156,6 +156,30 @@ jobs:
           assert not report["automatic_rollout_permitted"]
           print("Closed-cohort synthetic reconciliation passed; no live completeness claim.")
           PY
+      - name: Challenge a signed manifest with a customer-held receipt
+        run: |
+          python - <<'PY'
+          from client_request_receipt import issue_request_receipt, challenge_request_receipt
+          from watch_outcome_ledger import create_issued_checkpoint
+          ingress = b"synthetic-ingress-key-32-separate-bytes"
+          customer = b"synthetic-customer-key-32-separate-bytes"
+          issued = [dict(sequence=i, request_id=f"test-{i}", group="general",
+                         model_revision="fixed", rubric_id="v1") for i in range(1, 31)]
+          receipt = issue_request_receipt(issued[17], cohort_id="ci-demo", receipt_key=customer)
+          def close(rows):
+              return create_issued_checkpoint(rows, cohort_id="ci-demo", groups=["general"],
+                  model_revision="fixed", rubric_id="v1", ingress_key=ingress)
+          closed = close(issued)
+          def challenge(rows, checkpoint):
+              return challenge_request_receipt(receipt, rows, checkpoint,
+                  receipt_key=customer, ingress_key=ingress,
+                  expected_current_checkpoint_hmac_sha256=checkpoint["ingress_hmac_sha256"])
+          assert challenge(issued, closed)["included"]
+          changed = [*issued]
+          changed[17] = {**issued[17], "request_id": "hidden-request"}
+          assert not challenge(changed, close(changed))["included"]
+          print("Synthetic receipt challenge detected a signed-manifest rewrite.")
+          PY
       - name: Verify original scaffold benchmark
         run: python benchmark.py --runs 3 > /dev/null
       - name: Generate labeled synthetic evidence and HTML report

@@ -13,6 +13,7 @@ from watch_outcome_ledger import create_issued_checkpoint
 
 INGRESS_KEY = b"prospective-fixture-ingress-key-32-bytes"
 WATCH_KEY = b"prospective-fixture-monitor-key-32-bytes"
+RECEIPT_KEY = b"prospective-fixture-receipt-key-32-bytes"
 
 
 class FakeQA:
@@ -47,21 +48,22 @@ def fixture(path):
 
 
 class ProspectiveLedgerAuditTests(unittest.TestCase):
-    def _setup(self, folder):
+    def _setup(self, folder, *, receipt_key=None):
         root = Path(folder)
         dataset = root / "dataset.json"
         digest = fixture(dataset)
         prepared = root / "prepared"
         checkpoint = prepare_cohort(
-            dataset, prepared, ingress_key=INGRESS_KEY,
+            dataset, prepared, ingress_key=INGRESS_KEY, receipt_key=receipt_key,
             expected_dataset_sha256=digest, offset=2, limit=12,
             model_revision=FakeQA.revision,
         )
         return dataset, digest, prepared, checkpoint
 
-    def _run(self, dataset, digest, prepared, checkpoint, target, qa):
+    def _run(self, dataset, digest, prepared, checkpoint, target, qa, *, receipt_key=None):
         return run_cohort(
             dataset, prepared, target, ingress_key=INGRESS_KEY,
+            receipt_key=receipt_key,
             watch_key=WATCH_KEY, expected_dataset_sha256=digest,
             expected_checkpoint_hmac=checkpoint["ingress_hmac_sha256"],
             offset=2, limit=12, model_revision=FakeQA.revision,
@@ -176,6 +178,55 @@ class ProspectiveLedgerAuditTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self._run(dataset, digest, prepared, looser, Path(folder) / "run", qa)
             self.assertEqual(qa.calls, 0)
+
+    def test_prepared_receipts_are_checked_before_inference_and_after_grading(self):
+        with tempfile.TemporaryDirectory() as folder:
+            dataset, digest, prepared, checkpoint = self._setup(
+                folder, receipt_key=RECEIPT_KEY)
+            receipt_path = prepared / "receipts.jsonl"
+            original = receipt_path.read_text()
+            receipts = [json.loads(line) for line in original.splitlines()]
+            self.assertEqual(len(receipts), 12)
+            plan = json.loads((prepared / "plan.json").read_text())
+            self.assertEqual(plan["receipt_count"], 12)
+            for variant in (
+                receipts[:-1],
+                [{**receipts[0], "request_id": "rewritten"}] + receipts[1:],
+                receipts[1:] + receipts[:1],
+            ):
+                receipt_path.write_text("".join(json.dumps(row) + "\n" for row in variant))
+                qa = FakeQA()
+                with self.assertRaises(ValueError):
+                    self._run(dataset, digest, prepared, checkpoint,
+                              Path(folder) / "never-run", qa, receipt_key=RECEIPT_KEY)
+                self.assertEqual(qa.calls, 0)
+            receipt_path.write_text(original)
+            target = Path(folder) / "run"
+            qa = FakeQA(fail_at=4)
+            report = self._run(dataset, digest, prepared, checkpoint, target, qa,
+                               receipt_key=RECEIPT_KEY)
+            self.assertEqual(qa.calls, 12)
+            self.assertEqual(report["receipt_count"], 12)
+            self.assertFalse(report["independent_customer_receipt_delivery"])
+            checked = verify_cohort(
+                dataset, prepared, target, ingress_key=INGRESS_KEY,
+                watch_key=WATCH_KEY, receipt_key=RECEIPT_KEY,
+                expected_dataset_sha256=digest,
+                expected_checkpoint_hmac=checkpoint["ingress_hmac_sha256"],
+                offset=2, limit=12, model_revision=FakeQA.revision,
+                qa_model=FakeQA.model_id,
+            )
+            self.assertEqual(checked, report)
+            receipt_path.write_text(original.replace('"nonce":', '"changed_nonce":', 1))
+            with self.assertRaises(ValueError):
+                verify_cohort(
+                    dataset, prepared, target, ingress_key=INGRESS_KEY,
+                    watch_key=WATCH_KEY, receipt_key=RECEIPT_KEY,
+                    expected_dataset_sha256=digest,
+                    expected_checkpoint_hmac=checkpoint["ingress_hmac_sha256"],
+                    offset=2, limit=12, model_revision=FakeQA.revision,
+                    qa_model=FakeQA.model_id,
+                )
 
 
 if __name__ == "__main__":

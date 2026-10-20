@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 from anytime_risk_watch import FRACTIONS, watch_risk_stream
+from client_request_receipt import challenge_request_receipt, issue_request_receipt
 from extractive_qa_engine import DEFAULT_QA_MODEL
 from real_model_watch_audit import (
     ALPHA, GROUPS, OFFICIAL_DATASET_SHA256, RUBRIC, SOURCE_CUTOFF,
@@ -21,7 +22,7 @@ from real_model_watch_audit import (
 )
 from squad_sentence_retrieval import load_questions
 from watch_outcome_ledger import (
-    create_issued_checkpoint, reconcile_issued_grades,
+    _digest, _key as _validate_key, create_issued_checkpoint, reconcile_issued_grades,
     verify_complete_report, verify_issued_checkpoint,
 )
 
@@ -78,7 +79,7 @@ def frozen_manifest(dataset_path, *, offset=OFFSET, limit=LIMIT,
     return rows, digest
 
 
-def prepare_cohort(dataset_path, out_dir, *, ingress_key,
+def prepare_cohort(dataset_path, out_dir, *, ingress_key, receipt_key=None,
                    expected_dataset_sha256=OFFICIAL_DATASET_SHA256,
                    offset=OFFSET, limit=LIMIT, model_revision=MODEL_REVISION):
     """Run and retain this stage before making any calls to the model."""
@@ -94,10 +95,28 @@ def prepare_cohort(dataset_path, out_dir, *, ingress_key,
         model_revision=model_revision, rubric_id=RUBRIC,
         ingress_key=ingress_key, target_error=TARGET_ERROR, alpha=ALPHA,
     )
+    if receipt_key is not None:
+        _validate_key(receipt_key, "receipt")
+        if hmac.compare_digest(receipt_key, ingress_key):
+            raise ValueError("receipt and ingress keys must be independent")
+        receipts = [issue_request_receipt(row, cohort_id=COHORT_ID,
+                                          receipt_key=receipt_key) for row in issued]
+    else:
+        receipts = None
     target.mkdir(parents=True)
     _write_jsonl(target / "issued.jsonl", issued)
     _write_json(target / "checkpoint.json", checkpoint)
-    _write_json(target / "plan.json", {
+    if receipts is not None:
+        _write_jsonl(target / "receipts.jsonl", receipts)
+    _write_json(target / "plan.json", _plan(
+        issued, checkpoint, digest=digest, offset=offset, limit=limit,
+        model_revision=model_revision, receipts=receipts,
+    ))
+    return checkpoint
+
+
+def _plan(issued, checkpoint, *, digest, offset, limit, model_revision, receipts):
+    result = {
         "kind": "aru_prospective_preinference_public_cohort",
         "dataset_sha256": digest, "offset": offset, "limit": limit,
         "model_revision": model_revision, "model_id": DEFAULT_QA_MODEL,
@@ -107,17 +126,30 @@ def prepare_cohort(dataset_path, out_dir, *, ingress_key,
         "issued_manifest_sha256": checkpoint["issued_manifest_sha256"],
         "ingress_checkpoint_hmac_sha256": checkpoint["ingress_hmac_sha256"],
         "graded": False, "automatic_rollout_permitted": False,
-    })
-    return checkpoint
+    }
+    if receipts is not None:
+        result["receipt_count"] = len(receipts)
+        result["receipt_manifest_sha256"] = _digest(receipts)
+        result["receipt_claims_prepared_before_model_calls"] = True
+    return result
 
 
-def _validate_prepared(dataset_path, prepared_dir, *, ingress_key,
+def _validate_prepared(dataset_path, prepared_dir, *, ingress_key, receipt_key,
                        expected_checkpoint_hmac, expected_dataset_sha256,
                        offset, limit, model_revision):
     folder = Path(prepared_dir)
     checkpoint = _read_json(folder / "checkpoint.json")
     planned = _read_json(folder / "plan.json")
     issued = _read_jsonl(folder / "issued.jsonl")
+    if receipt_key is not None:
+        _validate_key(receipt_key, "receipt")
+        if hmac.compare_digest(receipt_key, ingress_key):
+            raise ValueError("receipt and ingress keys must be independent")
+        receipts = _read_jsonl(folder / "receipts.jsonl")
+    else:
+        receipts = None
+        if (folder / "receipts.jsonl").exists():
+            raise ValueError("receipt key required for prepared customer claims")
     expected, digest = frozen_manifest(
         dataset_path, offset=offset, limit=limit, model_revision=model_revision,
         expected_dataset_sha256=expected_dataset_sha256,
@@ -141,18 +173,25 @@ def _validate_prepared(dataset_path, prepared_dir, *, ingress_key,
             or checkpoint["target_error"] != TARGET_ERROR
             or checkpoint["familywise_alpha"] != ALPHA
             or checkpoint["issued_count"] != limit
-            or planned != {
-                "kind": "aru_prospective_preinference_public_cohort",
-                "dataset_sha256": digest, "offset": offset, "limit": limit,
-                "model_revision": model_revision, "model_id": DEFAULT_QA_MODEL,
-                "rubric_id": RUBRIC, "groups": list(GROUPS),
-                "cohort_id": COHORT_ID, "issued_count": len(issued),
-                "issued_manifest_sha256": checkpoint["issued_manifest_sha256"],
-                "ingress_checkpoint_hmac_sha256": checkpoint["ingress_hmac_sha256"],
-                "graded": False, "automatic_rollout_permitted": False,
-            }):
+            or planned != _plan(expected, expected_checkpoint, digest=digest,
+                                offset=offset, limit=limit,
+                                model_revision=model_revision, receipts=receipts)):
         raise ValueError("invalid, stale or changed preinference issuance plan")
-    return issued, checkpoint, digest
+    if receipts is not None:
+        if len(receipts) != limit:
+            raise ValueError("incomplete preinference receipt claims")
+        for receipt in receipts:
+            result = challenge_request_receipt(
+                receipt, issued, checkpoint, receipt_key=receipt_key,
+                ingress_key=ingress_key,
+                expected_current_checkpoint_hmac_sha256=expected_checkpoint_hmac,
+            )
+            if not result["included"]:
+                raise ValueError("receipt disagrees with frozen issued cohort")
+        if (len({row["nonce"] for row in receipts}) != limit
+                or {row["sequence"] for row in receipts} != set(range(1, limit + 1))):
+            raise ValueError("receipt uniqueness or sequence coverage failed")
+    return issued, checkpoint, digest, receipts
 
 
 def _grades_from_observed(issued, observed):
@@ -174,8 +213,8 @@ def _grades_from_observed(issued, observed):
 
 
 def _accounting_report(issued, grades, watch, observed_report, *, digest,
-                       qa_model, offset, model_revision):
-    return {
+                       qa_model, offset, model_revision, receipts):
+    result = {
         "kind": "aru_prospective_public_real_model_outcome_accounting",
         "dataset_sha256": digest, "cohort_id": COHORT_ID,
         "model_revision": model_revision, "model_id": qa_model,
@@ -193,20 +232,29 @@ def _accounting_report(issued, grades, watch, observed_report, *, digest,
         "independently_audited_grader": False,
         "automatic_rollout_permitted": False,
     }
+    if receipts is not None:
+        result["receipt_count"] = len(receipts)
+        result["receipt_manifest_sha256"] = _digest(receipts)
+        result["receipt_claims_prepared_before_model_calls"] = True
+        result["independent_customer_receipt_delivery"] = False
+    return result
 
 
 def run_cohort(dataset_path, prepared_dir, out_dir, *, ingress_key, watch_key,
+               receipt_key=None,
                expected_checkpoint_hmac, acknowledge_model_calls=False,
                expected_dataset_sha256=OFFICIAL_DATASET_SHA256,
                offset=OFFSET, limit=LIMIT, model_revision=MODEL_REVISION,
                qa_model=DEFAULT_QA_MODEL, engine=None):
     if not acknowledge_model_calls:
         raise ValueError("explicit acknowledgement of model calls required")
+    if receipt_key is not None and hmac.compare_digest(receipt_key, watch_key):
+        raise ValueError("receipt and monitoring keys must be independent")
     if qa_model != DEFAULT_QA_MODEL and engine is None:
         raise ValueError("prospective public study requires its pinned model ID")
     # All independent-plan checks precede model initialization and inference.
-    issued, checkpoint, digest = _validate_prepared(
-        dataset_path, prepared_dir, ingress_key=ingress_key,
+    issued, checkpoint, digest, receipts = _validate_prepared(
+        dataset_path, prepared_dir, ingress_key=ingress_key, receipt_key=receipt_key,
         expected_checkpoint_hmac=expected_checkpoint_hmac,
         expected_dataset_sha256=expected_dataset_sha256,
         offset=offset, limit=limit, model_revision=model_revision,
@@ -243,18 +291,21 @@ def run_cohort(dataset_path, prepared_dir, out_dir, *, ingress_key, watch_key,
     report = _accounting_report(
         issued, grades, watch, observed_report, digest=digest,
         qa_model=qa_model, offset=offset, model_revision=model_revision,
+        receipts=receipts,
     )
     _write_json(target / "accounting_report.json", report)
     return report
 
 
 def verify_cohort(dataset_path, prepared_dir, out_dir, *, ingress_key, watch_key,
-                  expected_checkpoint_hmac,
+                  expected_checkpoint_hmac, receipt_key=None,
                   expected_dataset_sha256=OFFICIAL_DATASET_SHA256,
                   offset=OFFSET, limit=LIMIT, model_revision=MODEL_REVISION,
                   qa_model=DEFAULT_QA_MODEL):
-    issued, checkpoint, digest = _validate_prepared(
-        dataset_path, prepared_dir, ingress_key=ingress_key,
+    if receipt_key is not None and hmac.compare_digest(receipt_key, watch_key):
+        raise ValueError("receipt and monitoring keys must be independent")
+    issued, checkpoint, digest, receipts = _validate_prepared(
+        dataset_path, prepared_dir, ingress_key=ingress_key, receipt_key=receipt_key,
         expected_checkpoint_hmac=expected_checkpoint_hmac,
         expected_dataset_sha256=expected_dataset_sha256,
         offset=offset, limit=limit, model_revision=model_revision,
@@ -288,7 +339,7 @@ def verify_cohort(dataset_path, prepared_dir, out_dir, *, ingress_key, watch_key
             or report != _accounting_report(
                 issued, grades, signed, actual_report, digest=digest,
                 qa_model=qa_model, offset=offset,
-                model_revision=model_revision,
+                model_revision=model_revision, receipts=receipts,
             )):
         raise ValueError("prospective issued/graded evidence did not verify")
     return report
@@ -318,8 +369,11 @@ def main():
     args = parser.parse_args()
     try:
         ingress_key = _key("ARU_ISSUED_SIGNING_KEY")
+        receipt_key = (_key("ARU_RECEIPT_SIGNING_KEY")
+                       if "ARU_RECEIPT_SIGNING_KEY" in os.environ else None)
         if args.command == "prepare":
-            result = prepare_cohort(args.dataset, args.prepared_dir, ingress_key=ingress_key)
+            result = prepare_cohort(args.dataset, args.prepared_dir,
+                                    ingress_key=ingress_key, receipt_key=receipt_key)
             print(json.dumps({"prepared": True, "issued": result["issued_count"],
                               "checkpoint_hmac": result["ingress_hmac_sha256"]}))
             return
@@ -328,6 +382,7 @@ def main():
             report = run_cohort(
                 args.dataset, args.prepared_dir, args.out_dir,
                 ingress_key=ingress_key, watch_key=watch_key,
+                receipt_key=receipt_key,
                 expected_checkpoint_hmac=args.expected_checkpoint_hmac,
                 acknowledge_model_calls=args.acknowledge_model_calls,
             )
@@ -338,6 +393,7 @@ def main():
             report = verify_cohort(
                 args.dataset, args.prepared_dir, args.out_dir,
                 ingress_key=ingress_key, watch_key=watch_key,
+                receipt_key=receipt_key,
                 expected_checkpoint_hmac=args.expected_checkpoint_hmac,
             )
             print(json.dumps({"verified": True, "requested": report["requested"],

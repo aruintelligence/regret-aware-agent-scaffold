@@ -1,4 +1,4 @@
-"""Anchor a closed issued cohort, reconcile grades, and verify exact evidence."""
+"""Issue customer receipts, close cohorts, reconcile grades, and challenge omissions."""
 from __future__ import annotations
 
 import argparse
@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 
+from client_request_receipt import challenge_request_receipt, issue_request_receipt
 from watch_outcome_ledger import (
     create_issued_checkpoint, reconcile_issued_grades, verify_complete_report,
 )
@@ -46,6 +47,16 @@ def _exclusive_json(path, value):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
+    receipt = sub.add_parser("receipt", help="Issue a customer-held receipt before inference")
+    receipt.add_argument("--issue-json", required=True)
+    receipt.add_argument("--cohort-id", required=True)
+    receipt.add_argument("--out", required=True)
+    challenge = sub.add_parser("challenge", help="Challenge the current closed manifest with a held receipt")
+    challenge.add_argument("--receipt", required=True)
+    challenge.add_argument("--issued-jsonl", required=True)
+    challenge.add_argument("--checkpoint", required=True)
+    challenge.add_argument("--expected-checkpoint-hmac", required=True,
+                           help="Current HMAC from a separately controlled checkpoint store")
     anchor = sub.add_parser("anchor", help="Sign the closed issued cohort with the ingress key")
     anchor.add_argument("--issued-jsonl", required=True)
     anchor.add_argument("--cohort-id", required=True)
@@ -68,7 +79,27 @@ def main():
                              help="Current HMAC supplied by the independently controlled ingress ledger")
     args = parser.parse_args()
     try:
+        if args.command == "receipt":
+            result = issue_request_receipt(
+                _object(args.issue_json), cohort_id=args.cohort_id,
+                receipt_key=_key("ARU_RECEIPT_SIGNING_KEY"),
+            )
+            _exclusive_json(args.out, result)
+            print(json.dumps({"receipt": args.out, "sequence": result["sequence"]}))
+            return
         ingress_key = _key("ARU_ISSUED_SIGNING_KEY")
+        if args.command == "challenge":
+            result = challenge_request_receipt(
+                _object(args.receipt), _rows(args.issued_jsonl),
+                _object(args.checkpoint),
+                receipt_key=_key("ARU_RECEIPT_SIGNING_KEY"),
+                ingress_key=ingress_key,
+                expected_current_checkpoint_hmac_sha256=args.expected_checkpoint_hmac,
+            )
+            print(json.dumps(result, sort_keys=True))
+            if not result["included"]:
+                raise SystemExit(5)
+            return
         if args.command == "anchor":
             checkpoint = create_issued_checkpoint(
                 _rows(args.issued_jsonl), cohort_id=args.cohort_id,

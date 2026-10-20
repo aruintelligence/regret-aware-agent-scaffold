@@ -282,12 +282,14 @@ jobs:
           curl --fail --location --show-error --silent --retry 3 --max-time 120 https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json --output benchmark-data/dev-v1.1.json
           echo "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9  benchmark-data/dev-v1.1.json" | sha256sum --check
           sha256sum PROSPECTIVE_LEDGER_PROTOCOL.md > prospective-ledger-report/protocol.sha256
+          sha256sum RECEIPT_CHALLENGE_PROTOCOL.md > prospective-ledger-report/receipt-protocol.sha256
       - name: Provision ephemeral separate keys for the CI-only experiment
         run: |
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
           print('ARU_ISSUED_SIGNING_KEY=' + secrets.token_urlsafe(48))
           print('ARU_WATCH_SIGNING_KEY=' + secrets.token_urlsafe(48))
+          print('ARU_RECEIPT_SIGNING_KEY=' + secrets.token_urlsafe(48))
           PY
       - name: Freeze issued question cohort before model initialization
         id: prepare
@@ -330,12 +332,14 @@ jobs:
           root = Path('prospective-ledger-report')
           report = json.loads((root / 'run/accounting_report.json').read_text())
           issued = (root / 'prepared/issued.jsonl').read_text().splitlines()
+          receipts = (root / 'prepared/receipts.jsonl').read_text().splitlines()
           grades = (root / 'run/grades.jsonl').read_text().splitlines()
           observed = (root / 'run/actual_model/outcomes.jsonl').read_text().splitlines()
-          assert len(issued) == len(grades) == len(observed) == report['requested'] == report['graded'] == 120
+          assert len(issued) == len(receipts) == len(grades) == len(observed) == report['requested'] == report['graded'] == report['receipt_count'] == 120
           assert report['model_revision'] == '564e9b582944a57a3e586bbb98fd6f0a4118db7f'
           assert report['independent_ingress_operator'] is False
           assert report['independently_audited_grader'] is False
+          assert report['independent_customer_receipt_delivery'] is False
           assert report['automatic_rollout_permitted'] is False
           print('Observed errors:', report['errors'], 'alarm:', report['degradation_alarm'])
           print('CI-only prospective accounting; no customer or independent-grading claim.')
@@ -347,8 +351,10 @@ jobs:
           name: aru-prospective-complete-outcome-accounting
           path: |
             prospective-ledger-report/protocol.sha256
+            prospective-ledger-report/receipt-protocol.sha256
             prospective-ledger-report/prepare_summary.json
             prospective-ledger-report/prepared/issued.jsonl
+            prospective-ledger-report/prepared/receipts.jsonl
             prospective-ledger-report/prepared/checkpoint.json
             prospective-ledger-report/prepared/plan.json
             prospective-ledger-report/run/actual_model/outcomes.jsonl
