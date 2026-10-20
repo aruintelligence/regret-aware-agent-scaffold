@@ -27,11 +27,13 @@ dependencies = []
 
 [project.optional-dependencies]
 real-model = ["torch==2.5.1", "transformers==4.48.3", "safetensors==0.5.3"]
+public-grader = ["cryptography==50.0.2"]
 
 [project.scripts]
 aru-risk = "selective_risk_cli:main"
 aru-watch = "anytime_risk_watch_cli:main"
 aru-watch-ledger = "watch_outcome_ledger_cli:main"
+aru-grade-public = "public_grade_cli:main"
 aru-watch-prospective-audit = "prospective_ledger_audit:main"
 aru-watch-real-audit = "real_model_watch_audit:main"
 aru-watch-change-point-audit = "change_point_audit:main"
@@ -87,6 +89,8 @@ py-modules = [
   "client_request_receipt",
   "receipt_cohort_ledger",
   "grade_attestation_ledger",
+  "public_grade_ledger",
+  "public_grade_cli",
   "watch_outcome_ledger_cli",
   "prospective_ledger_audit",
   "real_model_watch_audit",

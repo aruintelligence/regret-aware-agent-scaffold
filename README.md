@@ -12,12 +12,13 @@ This is a scaffold with scripted specialist nodes. It does not call an LLM, brow
 
 ## Run it
 
-Requires Python 3.9 or newer; no package installation is needed.
+The scaffold requires Python 3.9 or newer and no package installation. To run the **full** test suite, install the optional public grader dependency first:
 
 ```bash
 python3 regret_aware_scaffold.py --runs 5
 python3 regret_aware_scaffold.py --prompt "Research a route evaluation method" --runs 3 --json
 python3 regret_aware_scaffold.py --runs 5 --memory-file route_memory.json
+python3 -m pip install '.[public-grader]'
 python3 -m unittest discover -s tests -v
 python3 benchmark.py --runs 5
 ```
@@ -75,6 +76,7 @@ The **ĀRU Decision Evidence Lab** adds a measurable research workflow without c
 ```bash
 python3 experiment_cli.py demo --out-dir demo-report --n 900 --seed 7
 # Open demo-report/index.html locally
+python3 -m pip install '.[public-grader]'
 python3 -m unittest discover -s tests -v
 ```
 
@@ -309,7 +311,7 @@ aru-squad --help
 aru-llm-squad --help
 ```
 
-The package is an **alpha research distribution**, not a hosted SaaS, production API, or PyPI release. Runtime modules use only the Python standard library; the optional packaging step requires setuptools. Do not install or expose the local HTTP gateway as a public service without a security review.
+The package is an **alpha research distribution**, not a hosted SaaS, production API, or PyPI release. The core runtime uses the Python standard library; the opt-in public-key grader requires the pinned `cryptography` dependency. Do not install or expose the local HTTP gateway as a public service without a security review.
 
 
 ## Premium research landing page (not yet deployed)
@@ -621,6 +623,8 @@ The [frozen receipt extension](RECEIPT_CHALLENGE_PROTOCOL.md) subsequently prepa
 For a full cohort, the opt-in [independent receipt ledger](RECEIPT_COHORT_LEDGER.md) adds `aru-watch-ledger receipt-anchor|receipt-audit` and `gate_with_receipt_ledger`. It compares separately signed, independently current receipt and ingress logs before the existing release gate. A counterexample test shows that the old gate accepts a validly re-signed ingress/watch after one request is replaced, while the receipt gate rejects it. Distinct keys and passing tests do not establish separate real-world operators or a customer pilot.
 
 The [independent grade ledger](INDEPENDENT_GRADE_LEDGER.md) adds `aru-watch-ledger grade|grade-anchor|grade-reconcile` and `gate_with_authenticated_grades`. It authenticates every binary label and the grader's closed log under a fourth key, then requires exact watch recomputation before the receipt, static risk and source gates. In bounded software tests, the receipt-only gate accepts watches re-signed after label flips; the grader-gated path rejects all 40 positions in both directions, including a concealed error. The archived model run used a repository-authored grader and does not become an independent grade audit through this new code.
+
+The opt-in [public-key grader ledger](PUBLIC_GRADE_LEDGER.md) removes the HMAC grader secret from the verifier. With `pip install '.[public-grader]'`, `aru-grade-public keygen|grade|close|verify|reconcile` signs labels and a closed checkpoint using Ed25519, then checks them against an independently pinned public key and current checkpoint digest. The read-only verify command requires no signing keys or ingress access. `gate_with_public_grades` rejects a re-signed watch that conceals a grader-attested error; tests also reject a substituted signing key. This is still research evidence and does not validate grader accuracy or independence.
 
 The [frozen preinference protocol](PROSPECTIVE_LEDGER_PROTOCOL.md) reserved 120 fresh public questions for `aru-watch-prospective-audit prepare|run|verify`. Its CI job signed the planned issuance manifest before any new model calls, then reconciled every result. The [observed result and archived exact evidence](PROSPECTIVE_LEDGER_RESULTS.md) show **120/120 calls graded**, 15 rubric errors, zero execution failures and no alarm at the deliberately high 50% research target. A single CI runner and repository-authored grader do not establish independent customer operation.
 

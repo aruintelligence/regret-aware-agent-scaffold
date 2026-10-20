@@ -7,6 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install pinned public-key grader runtime
+        run: python3 -m pip install --disable-pip-version-check cryptography==50.0.2
       - name: Run stdlib tests and benchmark
         run: |
           python3 -m unittest discover -s tests -v

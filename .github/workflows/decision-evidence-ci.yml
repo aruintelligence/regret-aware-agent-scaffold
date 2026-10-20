@@ -29,6 +29,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Compile modules
         run: python -m compileall -q .
+      - name: Install pinned public-key grader runtime
+        run: python -m pip install --disable-pip-version-check cryptography==50.0.2
       - name: Run all unit tests
         run: python -m unittest discover -s tests -v
       - name: Verify installable CLI distribution
@@ -49,6 +51,7 @@ jobs:
           aru-risk --help > /dev/null
           aru-watch --help > /dev/null
           aru-watch-ledger --help > /dev/null
+          aru-grade-public --help > /dev/null
           aru-watch-prospective-audit --help > /dev/null
           aru-watch-real-audit --help > /dev/null
           aru-watch-change-point-audit --help > /dev/null
