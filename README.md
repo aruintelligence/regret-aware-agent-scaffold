@@ -4,7 +4,7 @@
 >
 > **Independent human-gold benchmark:** on 2,000 questions from Stanford SQuAD v1.1, a question-aware sentence retriever selected the answer-containing sentence **82.1%** of the time versus **78.5%** for the lexical baseline (**+3.6 percentage points**). The exploratory article-cluster bootstrap interval was **+2.47 to +4.61 points**. One topic regressed, and the review gate blocked advancement. **This is sentence retrieval, not proof of better LLM reasoning or general intelligence.**
 >
-> **Evidence:** [Reproducible benchmark record](BENCHMARK_EVIDENCE.md) · [Commercialization blueprint](COMMERCIALIZATION.md) · [Decision Evidence Lab CI](https://github.com/aruintelligence/regret-aware-agent-scaffold/actions)
+> **Start here:** [Decision Evidence Lab evaluation brief](DECISION_EVIDENCE_BRIEF.md) · [Reproducible benchmark record](BENCHMARK_EVIDENCE.md) · [Commercialization blueprint](COMMERCIALIZATION.md) · [Decision Evidence Lab CI](https://github.com/aruintelligence/regret-aware-agent-scaffold/actions)
 
 A dependency-free Python **routing simulator** for studying how an agent controller can remember prior routes and calibrate predictions after each attempt. Created by Daniel Jacob Read IV and Shane Travis Horman (ĀRU Intelligence).
 
@@ -12,12 +12,13 @@ This is a scaffold with scripted specialist nodes. It does not call an LLM, brow
 
 ## Run it
 
-Requires Python 3.9 or newer; no package installation is needed.
+The scaffold requires Python 3.9 or newer and no package installation. To run the **full** test suite, install the optional public grader dependency first:
 
 ```bash
 python3 regret_aware_scaffold.py --runs 5
 python3 regret_aware_scaffold.py --prompt "Research a route evaluation method" --runs 3 --json
 python3 regret_aware_scaffold.py --runs 5 --memory-file route_memory.json
+python3 -m pip install '.[public-grader]'
 python3 -m unittest discover -s tests -v
 python3 benchmark.py --runs 5
 ```
@@ -75,6 +76,7 @@ The **ĀRU Decision Evidence Lab** adds a measurable research workflow without c
 ```bash
 python3 experiment_cli.py demo --out-dir demo-report --n 900 --seed 7
 # Open demo-report/index.html locally
+python3 -m pip install '.[public-grader]'
 python3 -m unittest discover -s tests -v
 ```
 
@@ -309,7 +311,7 @@ aru-squad --help
 aru-llm-squad --help
 ```
 
-The package is an **alpha research distribution**, not a hosted SaaS, production API, or PyPI release. Runtime modules use only the Python standard library; the optional packaging step requires setuptools. Do not install or expose the local HTTP gateway as a public service without a security review.
+The package is an **alpha research distribution**, not a hosted SaaS, production API, or PyPI release. The core runtime uses the Python standard library; the opt-in public-key grader requires the pinned `cryptography` dependency. Do not install or expose the local HTTP gateway as a public service without a security review.
 
 
 ## Premium research landing page (not yet deployed)
@@ -602,3 +604,42 @@ The quorum endpoint is integrated with the existing **Sovereign Source Registry*
 ### Sovereign consent-risk-proof integration
 
 `sovereign_risk_adapter.py` composes the existing revocable, purpose-limited source registry, optional separately keyed revocation checkpoint, signed calibration risk policy, and independently verifiable source-offset certificate. Source authorization must succeed **before model inference**. A stale calibration policy can be rejected by pinning the expected calibration-set ID. A deliberate SQLite revocation-tail deletion is detected when a separately retained checkpoint is required. This is a local research prototype; operator-attested grants are not independently verified legal consent and the authorization check is not atomic with final delivery.
+
+
+## Anytime Risk Watch — prospectively detect model deterioration
+
+The opt-in [ANYTIME_RISK_WATCH.md](ANYTIME_RISK_WATCH.md) research module extends the signed static selective-risk gate with a **prospective sequential degradation monitor**. A predeclared fixed-mixture e-process watches independently graded binary errors, per trusted group and aggregate, under the conditional null that error probability never exceeds a fixed target. A familywise anytime alarm is raised when evidence of deterioration crosses a predeclared threshold. This uses established supermartingale mathematics; it is **not** proof of AI safety.
+
+`aru-watch observe` processes local ordered JSONL outcome records and signs an aggregate report; `aru-watch verify` validates the HMAC. The new `gate_with_risk_watch` requires both the static signed calibration and a separately signed watch report, a current independently expected outcome-stream digest, minimum group observations, an absence of alarms, and an independently verified source certificate. A stale signed report is rejected rather than silently replayed.
+
+The monitor is **not** automatically scheduled or deployed. An alarm requires human investigation; no alarm is not evidence of correctness. The sequential interpretation depends on complete prospective outcomes, predeclared groups and bets, correct labels, and a valid conditional null. No customer data or raw prompts are stored in the signed summary.
+
+For a closed, separately issued request cohort, [complete outcome accounting](COMPLETE_OUTCOME_LEDGER.md) adds `aru-watch-ledger anchor|reconcile|verify` and `gate_with_complete_ledger`. A separately keyed ingress checkpoint binds the exact issued IDs and watch design. The reconciler refuses to sign an alarm-free result while even one issued request lacks a grade; the gate requires the current checkpoint and current outcome digest supplied by independent operators. The earlier archived real-model intervention passed a **retrospective software replay**; a later [120-call prospective CI cohort](PROSPECTIVE_LEDGER_RESULTS.md) accounted for each issued request under a single runner. This remains a local research pilot and cannot prove requests omitted before ingress without independent receipts or the truth of labels.
+
+The [customer-held request receipt challenge](CLIENT_RECEIPT_CHALLENGE.md) adds `aru-watch-ledger receipt|challenge`. A separate receipt issuer can sign a request's opaque issue row at admission and give it to the requester. After cohort closure, the requester can challenge that exact row against a current independently anchored manifest. A synthetic test detects 120/120 single-position manifest rewrites. No receipt was issued in the earlier real-model audit, and neither the code nor an HMAC alone establishes timely customer delivery or independent operation.
+
+The [frozen receipt extension](RECEIPT_CHALLENGE_PROTOCOL.md) subsequently prepared and verified [120/120 receipt claims before real-model inference](RECEIPT_CHALLENGE_RESULTS.md), then accounted for 120/120 actual calls and grades with 15 errors and no alarm at the 50% research target. The evidence bundle preserves each opaque claim and matching digest. The first run exposed ephemeral keys in CI logs; the corrected run masked them. Both runs used one CI authority, and no customer received a receipt. This remains a research demonstration with automatic rollout disabled.
+
+For a full cohort, the opt-in [independent receipt ledger](RECEIPT_COHORT_LEDGER.md) adds `aru-watch-ledger receipt-anchor|receipt-audit` and `gate_with_receipt_ledger`. It compares separately signed, independently current receipt and ingress logs before the existing release gate. A counterexample test shows that the old gate accepts a validly re-signed ingress/watch after one request is replaced, while the receipt gate rejects it. Distinct keys and passing tests do not establish separate real-world operators or a customer pilot.
+
+The [independent grade ledger](INDEPENDENT_GRADE_LEDGER.md) adds `aru-watch-ledger grade|grade-anchor|grade-reconcile` and `gate_with_authenticated_grades`. It authenticates every binary label and the grader's closed log under a fourth key, then requires exact watch recomputation before the receipt, static risk and source gates. In bounded software tests, the receipt-only gate accepts watches re-signed after label flips; the grader-gated path rejects all 40 positions in both directions, including a concealed error. The archived model run used a repository-authored grader and does not become an independent grade audit through this new code.
+
+The opt-in [public-key grader ledger](PUBLIC_GRADE_LEDGER.md) removes the HMAC grader secret from the verifier. With `pip install '.[public-grader]'`, `aru-grade-public keygen|grade|close|verify|reconcile` signs labels and a closed checkpoint using Ed25519, then checks them against an independently pinned public key and current checkpoint digest. The read-only verify command requires no signing keys or ingress access. `gate_with_public_grades` rejects a re-signed watch that conceals a grader-attested error; tests also reject a substituted signing key. This is still research evidence and does not validate grader accuracy or independence.
+
+The [witness quorum](GRADER_WITNESS_QUORUM.md) addresses the risk of a caller simply copying the attacker's key pin and checkpoint digest into that lower-level gate. Two host-pinned Ed25519 witnesses bind the grader, ingress, receipt and ordered-outcome fingerprints in one statement; the release verifier stores its authorized identity-to-key map at setup and rejects a caller-supplied substitute. Each witness's private state pins its own signing ID and key. Verifier-owned SQLite state rejects rollback after observing a newer statement and requires an owner-private directory as well as a private database file. `review_and_sign_witness_statement` validates the closed records against a witness-held grader pin and advances that witness's private head before returning its signature. The release gate also checks complete records before advancing its own head, so valid signatures paired with incomplete evidence cannot poison rollback state. Bounded counterexamples show how self-fed grader or witness pins can pass their respective lower-level checks while the pinned release gate denies them. Witness operation and fresh external publication remain assumptions, not measured customer controls.
+
+The [frozen preinference protocol](PROSPECTIVE_LEDGER_PROTOCOL.md) reserved 120 fresh public questions for `aru-watch-prospective-audit prepare|run|verify`. Its CI job signed the planned issuance manifest before any new model calls, then reconciled every result. The [observed result and archived exact evidence](PROSPECTIVE_LEDGER_RESULTS.md) show **120/120 calls graded**, 15 rubric errors, zero execution failures and no alarm at the deliberately high 50% research target. A single CI runner and repository-authored grader do not establish independent customer operation.
+
+### Real-model error stream and controlled deterioration audit
+
+The [fixed real-model watch protocol](REAL_MODEL_WATCH_PROTOCOL.md) reserves public SQuAD questions 200–319 for a specialized pretrained QA model. Every selected question is scored **after inference** against published human answers. Failed calls and abstentions remain in the error stream. The report measures the actual observed alarm, verified source coverage and answer accuracy; separate stress replays flip labels after predeclared onset points and measure alarm delay or missed detection. Those replays are **synthetic deterioration**, not evidence that a deployed model changed. A seeded conditional-null simulation checks software behavior but cannot estimate the real workflow's false-alarm rate.
+
+```bash
+# After downloading the pinned official SQuAD dev JSON and installing .[real-model]:
+aru-watch-real-audit --dataset dev-v1.1.json --out-dir watch-audit \
+  --acknowledge-model-calls
+```
+
+PR #7's real-model CI job records the model revision, protocol hash, ordered binary outcome stream and aggregate audit. The report is unsigned and uses a public development dataset. A signed, independently operated current ledger, separate static calibration and externally audited grading are still needed before evaluating a customer workflow. The dual-evidence gate now rejects signed monitoring whose error target or declared group scope differs from the signed calibration policy.
+
+**Observed audit:** [the first 120-question real-model results](REAL_MODEL_WATCH_RESULTS.md) recorded 12 rubric errors, zero execution failures and no baseline alarm. Only the earliest and most extreme of six **synthetic** post-onset deterioration scenarios triggered an alarm by request 120; the other five were missed. The complete public-benchmark binary event trace and aggregate report are retained for recomputation. This negative detection result motivates a separately preregistered change-point experiment; it does not justify altering the recorded threshold after viewing these outcomes.

@@ -29,8 +29,24 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Compile modules
         run: python -m compileall -q .
+      - name: Install pinned public-key grader runtime
+        run: python -m pip install --disable-pip-version-check cryptography==50.0.2
       - name: Run all unit tests
         run: python -m unittest discover -s tests -v
+      - name: Demonstrate witnessed gate denials (synthetic only)
+        run: |
+          python witness_gate_demo.py > /tmp/aru-witness-demo.json
+          python - <<'PY'
+          import json
+          report = json.load(open('/tmp/aru-witness-demo.json'))
+          assert report['status'] == 'all_expected_boundaries_observed'
+          assert report['synthetic_fixture'] and report['model_calls'] == 0
+          assert report['honest_epoch_1_accepted'] and report['honest_epoch_2_accepted']
+          assert len(report['attacks']) == 6
+          assert all(not case['accepted'] for case in report['attacks'])
+          assert report['automatic_rollout_permitted'] is False
+          print('Synthetic witnessed gate demo passed; no customer-operation claim.')
+          PY
       - name: Verify installable CLI distribution
         run: |
           python -m pip install --no-deps .
@@ -47,6 +63,23 @@ jobs:
           aru-qa-proof --help > /dev/null
           aru-qa-serve --help > /dev/null
           aru-risk --help > /dev/null
+          aru-watch --help > /dev/null
+          aru-watch-ledger --help > /dev/null
+          aru-grade-public --help > /dev/null
+          aru-witness-demo > /tmp/aru-witness-demo-installed.json
+          python - <<'PY'
+          import json
+          report = json.load(open('/tmp/aru-witness-demo-installed.json'))
+          assert report['status'] == 'all_expected_boundaries_observed'
+          assert report['synthetic_fixture'] and report['model_calls'] == 0
+          assert report['honest_epoch_1_accepted'] and report['honest_epoch_2_accepted']
+          assert len(report['attacks']) == 6
+          assert all(not case['accepted'] for case in report['attacks'])
+          PY
+          aru-watch-prospective-audit --help > /dev/null
+          aru-watch-real-audit --help > /dev/null
+          aru-watch-change-point-audit --help > /dev/null
+          aru-watch-calibrated-audit --help > /dev/null
           aru-source-registry --help > /dev/null
       - name: Verify prospective pilot sample-size planner
         run: |
@@ -106,6 +139,134 @@ jobs:
           assert bad <= 0.05, f"unexpected false certification in seeded synthetic null: {bad}"
           assert good >= 0.70, f"unexpected weak detection in seeded synthetic alternative: {good}"
           print(f"Synthetic risk screen: bad-model pass={bad:.3f}, good-model pass={good:.3f}")
+          PY
+      - name: Verify prospective signed anytime risk watch (synthetic only)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("/tmp/aru-watch-outcomes.jsonl")
+          path.write_text("".join(
+              json.dumps({"event_id": f"synthetic-{i}", "group": "general", "error": False}) + "\n"
+              for i in range(100)
+          ))
+          PY
+          export ARU_WATCH_SIGNING_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          aru-watch observe --outcomes-jsonl /tmp/aru-watch-outcomes.jsonl --groups general --model-revision fixed-test-sha --rubric-id test-grader --target-error 0.1 --alpha 0.05 --out /tmp/aru-watch-signed.json
+          aru-watch verify --report /tmp/aru-watch-signed.json
+          python - <<'PY'
+          import json
+          report = json.load(open("/tmp/aru-watch-signed.json"))
+          assert report["outcome_count"] == 100
+          assert not report["degradation_alarm"]
+          assert report["automatic_rollout_permitted"] is False
+          print("Synthetic signed prospective watch passed; no safety claim.")
+          PY
+      - name: Verify complete closed-cohort ledger and missing-grade denial
+        run: |
+          python - <<'PY'
+          from watch_outcome_ledger import create_issued_checkpoint, reconcile_issued_grades, verify_complete_report
+          ingress, monitor = b"synthetic-ingress-key-32-separate-bytes", b"synthetic-monitor-key-32-separate-bytes"
+          issued = [dict(sequence=i, request_id=f"test-{i}", group="general", model_revision="fixed",
+                         rubric_id="v1") for i in range(1, 31)]
+          grades = [dict(request_id=f"test-{i}", error=False, rubric_id="v1", grader_id="fixture")
+                    for i in range(1, 31)]
+          checkpoint = create_issued_checkpoint(issued, cohort_id="ci-demo", groups=["general"],
+              model_revision="fixed", rubric_id="v1", ingress_key=ingress)
+          assert reconcile_issued_grades(issued, grades[:-1], checkpoint=checkpoint,
+              ingress_key=ingress, watch_key=monitor)["status"] == "pending_grades"
+          report = reconcile_issued_grades(issued, grades, checkpoint=checkpoint,
+              ingress_key=ingress, watch_key=monitor)["report"]
+          assert verify_complete_report(report, issued, grades, checkpoint=checkpoint,
+              ingress_key=ingress, watch_key=monitor)
+          assert report["issued_count"] == report["graded_count"] == 30
+          assert not report["automatic_rollout_permitted"]
+          print("Closed-cohort synthetic reconciliation passed; no live completeness claim.")
+          PY
+      - name: Challenge a signed manifest with a customer-held receipt
+        run: |
+          python - <<'PY'
+          from client_request_receipt import issue_request_receipt, challenge_request_receipt
+          from watch_outcome_ledger import create_issued_checkpoint
+          ingress = b"synthetic-ingress-key-32-separate-bytes"
+          customer = b"synthetic-customer-key-32-separate-bytes"
+          issued = [dict(sequence=i, request_id=f"test-{i}", group="general",
+                         model_revision="fixed", rubric_id="v1") for i in range(1, 31)]
+          receipt = issue_request_receipt(issued[17], cohort_id="ci-demo", receipt_key=customer)
+          def close(rows):
+              return create_issued_checkpoint(rows, cohort_id="ci-demo", groups=["general"],
+                  model_revision="fixed", rubric_id="v1", ingress_key=ingress)
+          closed = close(issued)
+          def challenge(rows, checkpoint):
+              return challenge_request_receipt(receipt, rows, checkpoint,
+                  receipt_key=customer, ingress_key=ingress,
+                  expected_current_checkpoint_hmac_sha256=checkpoint["ingress_hmac_sha256"])
+          assert challenge(issued, closed)["included"]
+          changed = [*issued]
+          changed[17] = {**issued[17], "request_id": "hidden-request"}
+          assert not challenge(changed, close(changed))["included"]
+          print("Synthetic receipt challenge detected a signed-manifest rewrite.")
+          PY
+      - name: Deny a separately signed receipt/ingress cohort mismatch
+        run: |
+          python - <<'PY'
+          from client_request_receipt import issue_request_receipt
+          from receipt_cohort_ledger import create_receipt_checkpoint, reconcile_receipt_cohort
+          from watch_outcome_ledger import create_issued_checkpoint
+          issuer = b"synthetic-receipt-issuer-key-32-separate"
+          ingress = b"synthetic-ingress-store-key-32-separate"
+          issued = [dict(sequence=i, request_id=f"request-{i}", group="general",
+                         model_revision="fixed", rubric_id="v1") for i in range(1, 31)]
+          receipts = [issue_request_receipt(row, cohort_id="ci-demo", receipt_key=issuer)
+                      for row in issued]
+          received = create_receipt_checkpoint(receipts, cohort_id="ci-demo",
+              groups=["general"], model_revision="fixed", rubric_id="v1",
+              receipt_key=issuer)
+          def ingress_anchor(rows):
+              return create_issued_checkpoint(rows, cohort_id="ci-demo", groups=["general"],
+                  model_revision="fixed", rubric_id="v1", ingress_key=ingress)
+          def audit(rows):
+              anchor = ingress_anchor(rows)
+              return reconcile_receipt_cohort(receipts, rows, receipt_checkpoint=received,
+                  ingress_checkpoint=anchor, receipt_key=issuer, ingress_key=ingress,
+                  expected_current_receipt_hmac_sha256=received["receipt_ledger_hmac_sha256"],
+                  expected_current_ingress_hmac_sha256=anchor["ingress_hmac_sha256"])
+          assert audit(issued)["status"] == "complete"
+          changed = [*issued]
+          changed[17] = {**issued[17], "request_id": "silently-replaced"}
+          assert audit(changed)["conflict_sequences"] == [18]
+          print("Synthetic independent receipt log exposed a validly signed ingress rewrite.")
+          PY
+      - name: Deny watch labels that disagree with independent signed grades
+        run: |
+          python - <<'PY'
+          from grade_attestation_ledger import attest_grade, create_grade_checkpoint, audit_grade_cohort
+          from watch_outcome_ledger import create_issued_checkpoint, reconcile_issued_grades, verify_complete_report
+          ingress = b"synthetic-ingress-key-32-independent"
+          grader = b"synthetic-grader-key-32-independent"
+          monitor = b"synthetic-watch-key-32-independent"
+          issued = [dict(sequence=i, request_id=f"test-{i}", group="general",
+                         model_revision="fixed", rubric_id="v1") for i in range(1, 31)]
+          grades = [dict(request_id=f"test-{i}", error=i == 18, rubric_id="v1",
+                         grader_id="fixture") for i in range(1, 31)]
+          anchor = create_issued_checkpoint(issued, cohort_id="ci-demo", groups=["general"],
+              model_revision="fixed", rubric_id="v1", ingress_key=ingress)
+          signed = [attest_grade(g, grade_sequence=i, cohort_id="ci-demo",
+              model_revision="fixed", grader_key=grader) for i, g in enumerate(grades, 1)]
+          checkpoint = create_grade_checkpoint(signed, cohort_id="ci-demo",
+              model_revision="fixed", rubric_id="v1", grader_key=grader)
+          result = audit_grade_cohort(signed, issued, grade_checkpoint=checkpoint,
+              ingress_checkpoint=anchor, grader_key=grader, ingress_key=ingress,
+              expected_current_grade_hmac_sha256=checkpoint["grader_ledger_hmac_sha256"],
+              expected_current_ingress_hmac_sha256=anchor["ingress_hmac_sha256"])
+          assert result["status"] == "complete"
+          changed = [*grades]
+          changed[17] = {**grades[17], "error": False}
+          forged_watch = reconcile_issued_grades(issued, changed, checkpoint=anchor,
+              ingress_key=ingress, watch_key=monitor)["report"]
+          assert not verify_complete_report(forged_watch, issued, grades, checkpoint=anchor,
+              ingress_key=ingress, watch_key=monitor)
+          print("Synthetic signed grader log rejected a re-signed monitoring label.")
           PY
       - name: Verify original scaffold benchmark
         run: python benchmark.py --runs 3 > /dev/null

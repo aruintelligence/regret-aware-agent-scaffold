@@ -1,0 +1,25 @@
+{
+  "bet_fractions": [
+    0.02,
+    0.05,
+    0.1,
+    0.2,
+    0.4,
+    0.8
+  ],
+  "cohort_id": "squad-680-799-prospective-ledger-v1",
+  "familywise_alpha": 0.05,
+  "groups": [
+    "short_source",
+    "long_source"
+  ],
+  "ingress_hmac_sha256": "f1a03b31636d136351fd1c9949a8d38e5107e0405f8b97bb70a7a7a03d55c24b",
+  "issued_count": 120,
+  "issued_manifest_sha256": "405a239cc6a0d875e6fad9282ea47628c800e3adef0d94f9c1ea41cecd97b6cd",
+  "kind": "aru_issued_cohort_checkpoint",
+  "last_sequence": 120,
+  "model_revision": "564e9b582944a57a3e586bbb98fd6f0a4118db7f",
+  "rubric_id": "squad_v1.1_human_gold_normalized_f1_at_least_0.5_v1",
+  "schema_version": 1,
+  "target_error": 0.5
+}

@@ -6,7 +6,7 @@
 
 A reproducible, human-annotated **sentence-retrieval** experiment on 2,000 Stanford SQuAD v1.1 questions measured **78.5%** baseline versus **82.1%** challenger answer-containing-sentence selection (**+3.6 percentage points**). The article-cluster exploratory interval was **+2.47 to +4.61 percentage points**. One article regressed, so the human-review gate blocked advancement. Full methodology, dataset SHA-256 and CI provenance are in [BENCHMARK_EVIDENCE.md](BENCHMARK_EVIDENCE.md).
 
-The system now also includes an opt-in local/OpenAI-compatible LLM benchmark adapter (tested against a mock server, **not a real model**), and a loopback-only consent-gated SQLite/HMAC ingestion gateway with an export-to-dashboard evidence passport. A Python alpha distribution exposes four command-line tools, and a responsive commercial research page is included under `docs/` but **has not been publicly deployed**. The human-gold benchmark additionally stress-tests adversarial changes to the observed topic mixture; these are empirical sensitivity checks, not guarantees about unseen customers. These are tangible integration steps, **not evidence of enterprise production readiness**.
+The system also includes an opt-in local/OpenAI-compatible LLM benchmark adapter tested against a mock server, and a separate pinned open-weight model pipeline exercised on public QA questions. The [receipt challenge](RECEIPT_CHALLENGE_RESULTS.md) records 120 real-model calls and 15 rubric errors with no independent customer operator. A loopback-only consent-gated SQLite/HMAC ingestion gateway exports a dashboard evidence passport. A Python alpha distribution exposes command-line tools, and a responsive commercial research page is included under `docs/` but **has not been publicly deployed**. The human-gold benchmark additionally stress-tests adversarial changes to the observed topic mixture; these are empirical sensitivity checks, not guarantees about unseen customers. These are tangible integration steps, **not evidence of enterprise production readiness**.
 
 ## The product in one sentence
 
@@ -69,7 +69,7 @@ Avoid first deploying into autonomous medical, financial eligibility, policing, 
 | Analytic-ground-truth Monte Carlo falsification | Implemented on synthetic data |
 | Python 3.9 / 3.12 continuous tests | Implemented |
 | Real human-gold sentence-retrieval benchmark | Implemented and executed on 2,000 public SQuAD questions; **not an LLM** |
-| Optional OpenAI-compatible LLM executor | Implemented; local mock tested; **real model run not performed** |
+| Optional OpenAI-compatible LLM executor | Adapter tested against local mock; separate pinned open-weight public-QA model pipeline executed 120/120 calls in the receipt challenge, without customer operation |
 | Independent customer grader / customer outcomes | **Not implemented** |
 | Loopback-only SQLite/HMAC research ingestion gateway | Implemented; **not production certified** |
 | Production API, multi-tenancy, SSO/RBAC, encryption, retention controls | **Not implemented** |

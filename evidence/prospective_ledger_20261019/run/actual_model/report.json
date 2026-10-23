@@ -1,0 +1,186 @@
+{
+  "automatic_rollout_permitted": false,
+  "dataset": "Stanford SQuAD v1.1 public development split",
+  "dataset_sha256": "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9",
+  "exact_match_fraction": 0.7333333333333333,
+  "familywise_alpha": 0.05,
+  "groups": [
+    "short_source",
+    "long_source"
+  ],
+  "injected_deterioration": [
+    {
+      "alarm_groups": [],
+      "detected_after_onset": false,
+      "detection_delay_observations": null,
+      "first_alarm_global_observation": null,
+      "flipped_outcomes": 35,
+      "missed_by_horizon": true,
+      "onset_after_observations": 30,
+      "originally_correct_flip_probability": 0.5,
+      "pre_onset_alarm": false,
+      "synthetic_injection": true
+    },
+    {
+      "alarm_groups": [
+        "__all__",
+        "short_source",
+        "long_source"
+      ],
+      "detected_after_onset": true,
+      "detection_delay_observations": 57,
+      "first_alarm_global_observation": 87,
+      "flipped_outcomes": 77,
+      "missed_by_horizon": false,
+      "onset_after_observations": 30,
+      "originally_correct_flip_probability": 1.0,
+      "pre_onset_alarm": false,
+      "synthetic_injection": true
+    },
+    {
+      "alarm_groups": [],
+      "detected_after_onset": false,
+      "detection_delay_observations": null,
+      "first_alarm_global_observation": null,
+      "flipped_outcomes": 34,
+      "missed_by_horizon": true,
+      "onset_after_observations": 60,
+      "originally_correct_flip_probability": 0.5,
+      "pre_onset_alarm": false,
+      "synthetic_injection": true
+    },
+    {
+      "alarm_groups": [],
+      "detected_after_onset": false,
+      "detection_delay_observations": null,
+      "first_alarm_global_observation": null,
+      "flipped_outcomes": 52,
+      "missed_by_horizon": true,
+      "onset_after_observations": 60,
+      "originally_correct_flip_probability": 1.0,
+      "pre_onset_alarm": false,
+      "synthetic_injection": true
+    },
+    {
+      "alarm_groups": [],
+      "detected_after_onset": false,
+      "detection_delay_observations": null,
+      "first_alarm_global_observation": null,
+      "flipped_outcomes": 8,
+      "missed_by_horizon": true,
+      "onset_after_observations": 90,
+      "originally_correct_flip_probability": 0.5,
+      "pre_onset_alarm": false,
+      "synthetic_injection": true
+    },
+    {
+      "alarm_groups": [],
+      "detected_after_onset": false,
+      "detection_delay_observations": null,
+      "first_alarm_global_observation": null,
+      "flipped_outcomes": 26,
+      "missed_by_horizon": true,
+      "onset_after_observations": 90,
+      "originally_correct_flip_probability": 1.0,
+      "pre_onset_alarm": false,
+      "synthetic_injection": true
+    }
+  ],
+  "kind": "aru_real_model_anytime_watch_public_human_gold_audit",
+  "limitations": [
+    "Public development questions are not a hidden holdout or customer workflow.",
+    "Human gold answers are external, but this repository's grading code is not independently audited.",
+    "The F1 cutoff and high error target are research stress-test choices, not safety thresholds.",
+    "Questions within articles may be correlated; the sequential conditional null is not established.",
+    "The injected drift changes graded labels, not a real deployed model; detection delays are stress results only.",
+    "One observed stream cannot estimate a real-world false-alarm rate or power.",
+    "This unsigned audit is not an independently operated monitoring ledger or signed release certificate."
+  ],
+  "mean_normalized_token_f1": 0.8416334281187224,
+  "model": "distilbert/distilbert-base-cased-distilled-squad",
+  "model_call_failures_counted_as_errors": 0,
+  "model_revision": "564e9b582944a57a3e586bbb98fd6f0a4118db7f",
+  "observed": 120,
+  "observed_baseline_first_alarm_global_observation": null,
+  "observed_model_watch": {
+    "alarm_groups": [],
+    "automatic_rollout_permitted": false,
+    "bet_fractions": [
+      0.02,
+      0.05,
+      0.1,
+      0.2,
+      0.4,
+      0.8
+    ],
+    "degradation_alarm": false,
+    "familywise_alpha": 0.05,
+    "groups": [
+      "short_source",
+      "long_source"
+    ],
+    "kind": "aru_anytime_risk_watch",
+    "limitations": [
+      "A lack of alarm is NOT evidence that the model is safe or below the target error rate.",
+      "Anytime-valid error control requires the prospective conditional null, fixed betting mixture and complete outcomes.",
+      "Selective, delayed, missing or manipulated labels can invalidate the risk alarm interpretation.",
+      "Trusted groups and model/rubric identities must be assigned outside the AI model.",
+      "Monitoring does not itself authorize rollout; human review remains required."
+    ],
+    "log_alarm_threshold": 4.0943445622221,
+    "model_revision": "564e9b582944a57a3e586bbb98fd6f0a4118db7f",
+    "monitoring_state": "no_alarm_observed",
+    "ordered_outcomes_sha256": "74e85f4aaff34894151b052dc8f001baf4a213ecbc988e8fbe77528fce318bb5",
+    "outcome_count": 120,
+    "rubric_id": "squad_v1.1_human_gold_normalized_f1_at_least_0.5_v1",
+    "schema_version": 1,
+    "slice_count": 3,
+    "slices": {
+      "__all__": {
+        "degradation_alarm": false,
+        "errors": 15,
+        "final_log_e": -3.5582669467363193,
+        "first_crossing_observation": null,
+        "max_log_e": 0.0,
+        "n_observed": 120,
+        "observed_error_rate": 0.125
+      },
+      "long_source": {
+        "degradation_alarm": false,
+        "errors": 9,
+        "final_log_e": -3.078326570445115,
+        "first_crossing_observation": null,
+        "max_log_e": 0.0,
+        "n_observed": 87,
+        "observed_error_rate": 0.10344827586206896
+      },
+      "short_source": {
+        "degradation_alarm": false,
+        "errors": 6,
+        "final_log_e": -1.6978909007563634,
+        "first_crossing_observation": null,
+        "max_log_e": 0.0,
+        "n_observed": 33,
+        "observed_error_rate": 0.18181818181818182
+      }
+    },
+    "target_error": 0.5
+  },
+  "observed_outcomes_kind": "actual_model_calls_scored_after_inference_against_published_human_answers",
+  "offset": 680,
+  "requested": 120,
+  "rubric_id": "squad_v1.1_human_gold_normalized_f1_at_least_0.5_v1",
+  "selection": "SHA256-sorted question IDs, no outcome-dependent exclusions",
+  "source_group_cutoff_characters": 600,
+  "stress_outcomes_kind": "synthetic_label_flips_and_iid_null_only",
+  "synthetic_iid_null": {
+    "alarm_fraction": 0.0,
+    "alarms": 0,
+    "does_not_estimate_real_model_false_alarm_rate": true,
+    "generating_error_probability": 0.5,
+    "trials": 1
+  },
+  "target_error": 0.5,
+  "total_answerable_questions": 10570,
+  "verified_source_certificates": 120
+}

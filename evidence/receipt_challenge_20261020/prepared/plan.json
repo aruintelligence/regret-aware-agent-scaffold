@@ -1,0 +1,22 @@
+{
+  "automatic_rollout_permitted": false,
+  "cohort_id": "squad-680-799-prospective-ledger-v1",
+  "dataset_sha256": "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9",
+  "graded": false,
+  "groups": [
+    "short_source",
+    "long_source"
+  ],
+  "ingress_checkpoint_hmac_sha256": "f1a03b31636d136351fd1c9949a8d38e5107e0405f8b97bb70a7a7a03d55c24b",
+  "issued_count": 120,
+  "issued_manifest_sha256": "405a239cc6a0d875e6fad9282ea47628c800e3adef0d94f9c1ea41cecd97b6cd",
+  "kind": "aru_prospective_preinference_public_cohort",
+  "limit": 120,
+  "model_id": "distilbert/distilbert-base-cased-distilled-squad",
+  "model_revision": "564e9b582944a57a3e586bbb98fd6f0a4118db7f",
+  "offset": 680,
+  "receipt_claims_prepared_before_model_calls": true,
+  "receipt_count": 120,
+  "receipt_manifest_sha256": "41eccbb6f79c24ef6db34760feb28aeafb30fe9db01171ec04c89e93657fd105",
+  "rubric_id": "squad_v1.1_human_gold_normalized_f1_at_least_0.5_v1"
+}
