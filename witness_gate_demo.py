@@ -16,10 +16,11 @@ from grader_witness_quorum import (
     sign_witness_statement, statement_fingerprint, verify_witness_quorum,
 )
 from public_grade_ledger import public_key_fingerprint
+from selective_risk_gate import fit_selective_risk_policy, sign_risk_policy
 from witness_demo_fixture import (
     PINNED, PUBLIC_A, PUBLIC_B, WITNESS_A, WITNESS_B, fixture,
     ATTACKER_PRIVATE, ATTACKER_PUBLIC, PUBLIC, RECEIPT_KEY,
-    INGRESS_KEY, WATCH_KEY, policy,
+    INGRESS_KEY, WATCH_KEY, POLICY_KEY, policy,
 )
 
 
@@ -37,7 +38,8 @@ def run_demo():
             initialize_witness_state(
                 path, witness_id=witness_id, witness_public_key=public_key)
         initialize_witness_state(
-            verifier_state, trusted_witness_public_keys=PINNED)
+            verifier_state, trusted_witness_public_keys=PINNED,
+            risk_policy=policy())
 
         evidence = {
             "grader_public_key": PUBLIC, "attestations": held["attestations"],
@@ -61,9 +63,10 @@ def run_demo():
                 )]
 
         def gate(statement, approvals, *, keys=PINNED, held_change=None,
-                 decision_change=None):
+                 decision_change=None, calibration=None):
             return gate_with_witnessed_public_grades(
-                policy(), statement=statement, witness_approvals=approvals,
+                policy() if calibration is None else calibration,
+                statement=statement, witness_approvals=approvals,
                 trusted_witness_public_keys=keys,
                 witness_state_path=verifier_state,
                 **{**held, **(held_change or {})},
@@ -78,6 +81,16 @@ def run_demo():
         ]
         lower_level = verify_witness_quorum(
             first, substituted, trusted_witness_public_keys=replacement)
+        permissive = sign_risk_policy(fit_selective_risk_policy(
+            [{"sample_id": str(i), "score": 0.9 if i < 150 else 0.1,
+              "correct": True, "group": "general"} for i in range(200)],
+            thresholds=[0.05, 0.5, 0.95], groups=["general"],
+            target_error=0.1, alpha=0.05, min_group_support=30,
+            model_revision="fixed-qa-revision", rubric_id="rubric-v1",
+            calibration_set_id="alternate-calibration",
+        ), key=POLICY_KEY)
+        if permissive["selected_threshold"] >= policy()["selected_threshold"]:
+            raise AssertionError("replacement did not lower the risk threshold")
         cases = [
             ("self_fed_witness_map", gate(first, substituted, keys=replacement),
              "invalid_or_stale_witness_quorum"),
@@ -93,6 +106,10 @@ def run_demo():
                                        **decision["watch_report"],
                                        "ordered_outcomes_sha256": "f" * 64}}),
              "invalid_or_incomplete_witness_evidence"),
+            ("signed_policy_replacement",
+             gate(first, first_approvals, calibration=permissive,
+                  decision_change={"score": 0.1}),
+             "untrusted_or_stale_risk_policy"),
         ]
         for name, result, expected_reason in cases:
             if result.get("accepted") or result.get("reason") != expected_reason:

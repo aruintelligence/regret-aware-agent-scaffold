@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from grader_witness_quorum import (
     GENESIS, gate_with_witnessed_public_grades, initialize_witness_state,
-    make_witness_statement, pin_existing_signer_state,
+    make_witness_statement, pin_existing_risk_policy, pin_existing_signer_state,
     pin_existing_witness_state,
     record_witness_head, review_and_sign_witness_statement,
     sign_witness_statement, statement_fingerprint,
@@ -19,6 +19,7 @@ from public_grade_ledger import (
     close_public_grades, gate_with_public_grades,
     public_checkpoint_fingerprint, public_key_fingerprint, sign_public_grade,
 )
+from selective_risk_gate import fit_selective_risk_policy, sign_risk_policy
 from tests.test_public_grade_ledger import (
     ATTACKER_PRIVATE, ATTACKER_PUBLIC, PUBLIC, signed_fixture,
 )
@@ -84,7 +85,8 @@ class WitnessQuorumTests(unittest.TestCase):
             private_dir = Path(directory) / "host-state"
             private_dir.mkdir(mode=0o700)
             state = private_dir / "head.sqlite3"
-            initialize_witness_state(state, trusted_witness_public_keys=PINNED)
+            initialize_witness_state(
+                state, trusted_witness_public_keys=PINNED, risk_policy=policy())
             parameters = {
                 "statement": statement, "witness_approvals": approvals,
                 "trusted_witness_public_keys": PINNED,
@@ -99,7 +101,8 @@ class WitnessQuorumTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "owner-private"):
                     initialize_witness_state(
                         private_dir / "new.sqlite3",
-                        trusted_witness_public_keys=PINNED)
+                        trusted_witness_public_keys=PINNED,
+                        risk_policy=policy())
                 self.assertFalse((private_dir / "new.sqlite3").exists())
                 self.assertEqual(gate_with_witnessed_public_grades(
                     policy(), **parameters)["reason"],
@@ -138,6 +141,9 @@ class WitnessQuorumTests(unittest.TestCase):
             record_witness_head(unpinned, statement)
             pin_existing_witness_state(
                 unpinned, trusted_witness_public_keys=PINNED)
+            self.assertEqual(gate(unpinned, PINNED, approvals)["reason"],
+                             "untrusted_or_stale_risk_policy")
+            pin_existing_risk_policy(unpinned, risk_policy=policy())
             self.assertTrue(gate(unpinned, PINNED, approvals)["accepted"])
             with self.assertRaisesRegex(ValueError, "already pinned"):
                 pin_existing_witness_state(
@@ -161,7 +167,8 @@ class WitnessQuorumTests(unittest.TestCase):
             self.assertEqual(gate(unpinned, PINNED, approvals)["reason"],
                              "invalid_or_stale_witness_quorum")
             pinned = Path(directory) / "pinned.sqlite3"
-            initialize_witness_state(pinned, trusted_witness_public_keys=PINNED)
+            initialize_witness_state(
+                pinned, trusted_witness_public_keys=PINNED, risk_policy=policy())
             self.assertEqual(gate(pinned, substituted_map, substituted_approvals)["reason"],
                              "invalid_or_stale_witness_quorum")
             self.assertTrue(gate(pinned, PINNED, approvals)["accepted"])
@@ -306,7 +313,9 @@ class WitnessQuorumTests(unittest.TestCase):
                 trusted_witness_public_keys=PINNED,
                 witness_state_path=state_path, **held, **decision)["reason"],
                 "invalid_or_stale_witness_quorum")
-            initialize_witness_state(state_path, trusted_witness_public_keys=PINNED)
+            initialize_witness_state(
+                state_path, trusted_witness_public_keys=PINNED,
+                risk_policy=policy())
             self.assertEqual(state_path.stat().st_mode & 0o777, 0o600)
             params = {
                 "statement": statement, "witness_approvals": approvals,
@@ -330,6 +339,43 @@ class WitnessQuorumTests(unittest.TestCase):
                              "trusted_witness_public_keys":
                                  {"review-a": PUBLIC, "review-b": PUBLIC_B}})["reason"],
                 "grader_key_reused_as_witness")
+
+    def test_signed_calibration_replacement_cannot_turn_low_score_into_release(self):
+        """Same signing key, model and rubric can sign a permissive replacement."""
+        _, _, _, statement, approvals, held, decision = fixture()
+        rows = [
+            {"sample_id": str(i), "score": 0.9 if i < 150 else 0.1,
+             "correct": True, "group": "general"}
+            for i in range(200)
+        ]
+        replacement = sign_risk_policy(fit_selective_risk_policy(
+            rows, thresholds=[0.05, 0.5, 0.95], groups=["general"],
+            target_error=0.1, alpha=0.05, min_group_support=30,
+            model_revision="fixed-qa-revision", rubric_id="rubric-v1",
+            calibration_set_id="alternate-calibration",
+        ), key=POLICY_KEY)
+        self.assertEqual(policy()["selected_threshold"], 0.5)
+        self.assertEqual(replacement["selected_threshold"], 0.05)
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "verifier.sqlite3"
+            initialize_witness_state(
+                state, trusted_witness_public_keys=PINNED, risk_policy=policy())
+
+            def gate(candidate, score):
+                return gate_with_witnessed_public_grades(
+                    candidate, statement=statement, witness_approvals=approvals,
+                    trusted_witness_public_keys=PINNED, witness_state_path=state,
+                    **held, **{**decision, "score": score})
+
+            self.assertEqual(gate(replacement, 0.1)["reason"],
+                             "untrusted_or_stale_risk_policy")
+            self.assertEqual(gate(policy(), 0.1)["reason"],
+                             "score_below_threshold")
+            self.assertTrue(gate(policy(), 0.9)["accepted"])
+            with self.assertRaisesRegex(ValueError, "already pinned"):
+                pin_existing_risk_policy(state, risk_policy=replacement)
+            self.assertEqual(gate(replacement, 0.9)["reason"],
+                             "untrusted_or_stale_risk_policy")
 
     def test_self_fed_attacker_key_passes_unwitnessed_gate_but_quorum_blocks_it(self):
         issued, grades, ingress, statement, approvals, held, decision = fixture()
@@ -367,7 +413,9 @@ class WitnessQuorumTests(unittest.TestCase):
             expected_outcomes_sha256=forged_watch["ordered_outcomes_sha256"])["accepted"])
         with tempfile.TemporaryDirectory() as directory:
             state_path = Path(directory) / "state.sqlite3"
-            initialize_witness_state(state_path, trusted_witness_public_keys=PINNED)
+            initialize_witness_state(
+                state_path, trusted_witness_public_keys=PINNED,
+                risk_policy=policy())
             denied = gate_with_witnessed_public_grades(
                 policy(), statement=statement, witness_approvals=approvals,
                 trusted_witness_public_keys=PINNED,
@@ -394,7 +442,8 @@ class WitnessQuorumTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / "verifier.sqlite3"
-            initialize_witness_state(state, trusted_witness_public_keys=PINNED)
+            initialize_witness_state(
+                state, trusted_witness_public_keys=PINNED, risk_policy=policy())
 
             def gate(statement, approvals, held_change=None, decision_change=None):
                 return gate_with_witnessed_public_grades(
@@ -432,7 +481,9 @@ class WitnessQuorumTests(unittest.TestCase):
         issued, grades, ingress, first, approvals, held, decision = fixture()
         with tempfile.TemporaryDirectory() as directory:
             state_path = Path(directory) / "witness.sqlite3"
-            initialize_witness_state(state_path, trusted_witness_public_keys=PINNED)
+            initialize_witness_state(
+                state_path, trusted_witness_public_keys=PINNED,
+                risk_policy=policy())
 
             def gate(statement, approvals):
                 return gate_with_witnessed_public_grades(

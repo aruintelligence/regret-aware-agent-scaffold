@@ -42,7 +42,7 @@ jobs:
           assert report['status'] == 'all_expected_boundaries_observed'
           assert report['synthetic_fixture'] and report['model_calls'] == 0
           assert report['honest_epoch_1_accepted'] and report['honest_epoch_2_accepted']
-          assert len(report['attacks']) == 5
+          assert len(report['attacks']) == 6
           assert all(not case['accepted'] for case in report['attacks'])
           assert report['automatic_rollout_permitted'] is False
           print('Synthetic witnessed gate demo passed; no customer-operation claim.')
@@ -73,7 +73,7 @@ jobs:
           assert report['status'] == 'all_expected_boundaries_observed'
           assert report['synthetic_fixture'] and report['model_calls'] == 0
           assert report['honest_epoch_1_accepted'] and report['honest_epoch_2_accepted']
-          assert len(report['attacks']) == 5
+          assert len(report['attacks']) == 6
           assert all(not case['accepted'] for case in report['attacks'])
           PY
           aru-watch-prospective-audit --help > /dev/null

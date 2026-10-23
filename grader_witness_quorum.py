@@ -252,6 +252,15 @@ def _signer_policy_digest(witness_id, witness_public_key):
                         public_key_fingerprint(witness_public_key)})
 
 
+def risk_policy_fingerprint(policy):
+    """Fingerprint the entire signed calibration policy for host setup."""
+    if (not isinstance(policy, dict) or policy.get("schema_version") != 1
+            or policy.get("kind") != "aru_selective_risk_calibration"
+            or not _hex(policy.get("policy_hmac_sha256"))):
+        raise ValueError("signed risk policy required for witness verifier setup")
+    return _digest(policy)
+
+
 def _private_state_target(state_path):
     target = Path(state_path)
     _private_state_parent(target)
@@ -287,6 +296,20 @@ def _verify_pinned_witness_policy(state_path, trusted_witness_public_keys):
         ).fetchone()
     if row is None or not hmac.compare_digest(row[0], digest):
         raise ValueError("caller witness map differs from pinned verifier policy")
+
+
+def _verify_pinned_risk_policy(state_path, policy):
+    digest = risk_policy_fingerprint(policy)
+    target = _private_state_target(state_path)
+    try:
+        with sqlite3.connect(str(target), timeout=10) as db:
+            row = db.execute(
+                "SELECT policy_sha256 FROM witness_risk_policy WHERE id=1"
+            ).fetchone()
+    except sqlite3.Error as exc:
+        raise ValueError("pinned risk policy required") from exc
+    if row is None or not hmac.compare_digest(row[0], digest):
+        raise ValueError("signed risk policy differs from verifier pin")
 
 
 def _verify_signer_state(state_path, witness_id, witness_private_key):
@@ -343,15 +366,20 @@ def record_witness_head(state_path, statement):
 
 
 def initialize_witness_state(state_path, *, trusted_witness_public_keys=None,
-                             witness_id=None, witness_public_key=None):
+                             witness_id=None, witness_public_key=None,
+                             risk_policy=None):
     """Create private state pinned for a verifier or an individual signer."""
     if (trusted_witness_public_keys is not None
             and (witness_id is not None or witness_public_key is not None)):
         raise ValueError("verifier and signer identities need separate state")
     if (witness_id is None) != (witness_public_key is None):
         raise ValueError("witness signer ID and public key required together")
+    if (trusted_witness_public_keys is None) != (risk_policy is None):
+        raise ValueError("verifier setup requires witness keys and signed risk policy")
     policy_digest = (_witness_policy_digest(trusted_witness_public_keys)
                      if trusted_witness_public_keys is not None else None)
+    risk_digest = (risk_policy_fingerprint(risk_policy)
+                   if risk_policy is not None else None)
     signer_digest = (_signer_policy_digest(witness_id, witness_public_key)
                      if witness_id is not None else None)
     target = Path(state_path)
@@ -373,6 +401,11 @@ def initialize_witness_state(state_path, *, trusted_witness_public_keys=None,
                 "policy_sha256 TEXT NOT NULL)"
             )
             db.execute("INSERT INTO witness_policy VALUES (1,?)", (policy_digest,))
+            db.execute(
+                "CREATE TABLE witness_risk_policy ("
+                "id INTEGER PRIMARY KEY CHECK(id=1), policy_sha256 TEXT NOT NULL)"
+            )
+            db.execute("INSERT INTO witness_risk_policy VALUES (1,?)", (risk_digest,))
         if signer_digest is not None:
             db.execute(
                 "CREATE TABLE witness_signer_policy ("
@@ -398,6 +431,32 @@ def pin_existing_signer_state(state_path, *, witness_id, witness_public_key):
     """Bind an existing witness head to its verified individual identity."""
     digest = _signer_policy_digest(witness_id, witness_public_key)
     return _pin_existing_policy(state_path, digest, "witness_signer_policy")
+
+
+def pin_existing_risk_policy(state_path, *, risk_policy):
+    """Attach the exact host-approved policy to a pinned verifier state."""
+    digest = risk_policy_fingerprint(risk_policy)
+    target = _private_state_target(state_path)
+    with sqlite3.connect(str(target), timeout=10) as db:
+        db.execute("PRAGMA synchronous=FULL")
+        db.execute("BEGIN IMMEDIATE")
+        if not db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='witness_policy'"
+        ).fetchone():
+            raise ValueError("pinned verifier state required before risk policy migration")
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS witness_risk_policy ("
+            "id INTEGER PRIMARY KEY CHECK(id=1), policy_sha256 TEXT NOT NULL)"
+        )
+        current = db.execute(
+            "SELECT policy_sha256 FROM witness_risk_policy WHERE id=1"
+        ).fetchone()
+        if current is None:
+            db.execute("INSERT INTO witness_risk_policy VALUES (1,?)", (digest,))
+        elif not hmac.compare_digest(current[0], digest):
+            raise ValueError("risk policy already pinned to different evidence")
+        db.commit()
+    return digest
 
 
 def _pin_existing_policy(state_path, digest, table):
@@ -457,6 +516,10 @@ def gate_with_witnessed_public_grades(policy, *, statement, witness_approvals,
         )
         _verify_pinned_witness_policy(witness_state_path,
                                       trusted_witness_public_keys)
+        try:
+            _verify_pinned_risk_policy(witness_state_path, policy)
+        except (TypeError, ValueError, OSError, sqlite3.Error):
+            return {**deny, "reason": "untrusted_or_stale_risk_policy"}
         ingress = gate_options["ingress_checkpoint"]
         if (statement["cohort_id"] != ingress["cohort_id"]
                 or statement["cohort_id"] != grade_checkpoint["cohort_id"]
